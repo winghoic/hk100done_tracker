@@ -439,6 +439,18 @@
 
         async function initFirebase() {
             try {
+                if (!firebaseConfig || Object.keys(firebaseConfig).length === 0 || !firebaseConfig.apiKey) {
+                    console.warn("No valid firebase config provided. Running in local storage mode.");
+                    window.auth = null;
+                    window.db = null;
+                    loadLocalData();
+                    renderScheduleList();
+                    renderHistoryList();
+                    updateProgressRing();
+                    updateProfileStats();
+                    updateMapPins();
+                    return;
+                }
                 const app = initializeApp(firebaseConfig);
                 window.db = getFirestore(app);
                 window.auth = getAuth(app);
@@ -474,6 +486,14 @@
 
         window.loginWithGoogle = async function() {
             try {
+                if (!window.auth || !window.auth.app) {
+                    showIOSAlert(
+                        "Guest Mode Active", 
+                        "Cloud sync and Google Sign-In require a valid Firebase project configuration. Your app is currently fully functional in local offline guest mode, saving all your hikes and progress right on your device!", 
+                        [{ text: "OK", style: "cancel" }]
+                    );
+                    return;
+                }
                 const provider = new GoogleAuthProvider();
                 await signInWithPopup(window.auth, provider);
                 showIOSAlert("Success", "Successfully signed in with Google!", [{ text: "OK", style: "cancel" }]);
