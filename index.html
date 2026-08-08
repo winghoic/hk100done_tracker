@@ -77,14 +77,20 @@
             display: none !important;
             overflow-y: auto;
             padding-top: var(--safe-area-top);
+            pointer-events: none;
         }
         .view-layer.active {
             display: flex !important;
         }
         
+        .pointer-auto {
+            pointer-events: auto;
+        }
+        
         .view-layer-bg {
             background-color: #000;
             z-index: 15;
+            pointer-events: auto;
         }
 
         ::-webkit-scrollbar {
@@ -124,22 +130,22 @@
     <div id="map"></div>
 
     <!-- Map Zoom Floating Controls -->
-    <div id="map-zoom-controls" class="absolute right-4 top-20 z-20 flex flex-col space-y-2">
+    <div id="map-zoom-controls" class="absolute right-4 top-20 z-20 flex flex-col space-y-2 pointer-auto">
         <button onclick="map.zoomIn()" class="w-11 h-11 glass-card rounded-2xl flex items-center justify-center text-white active:scale-95 shadow-lg"><i class="fa-solid fa-plus text-sm"></i></button>
         <button onclick="map.zoomOut()" class="w-11 h-11 glass-card rounded-2xl flex items-center justify-center text-white active:scale-95 shadow-lg"><i class="fa-solid fa-minus text-sm"></i></button>
     </div>
 
     <!-- View: Map (Clean overview showing all 100 peak pinpoints) -->
-    <div id="view-map" class="view-layer flex-col pt-12 px-4 items-center pointer-events-none">
-        <div class="glass-card px-5 py-2.5 rounded-full flex items-center space-x-3 shadow-lg pointer-events-auto">
+    <div id="view-map" class="view-layer flex-col pt-12 px-4 items-center">
+        <div class="glass-card px-5 py-2.5 rounded-full flex items-center space-x-3 shadow-lg pointer-auto">
             <div class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
             <span id="map-peaks-remaining" class="text-[15px] font-semibold text-white tracking-wide">Calculating...</span>
         </div>
     </div>
 
     <!-- View: Record (Tracking UI) -->
-    <div id="view-record" class="view-layer flex-col justify-end pb-6 px-4">
-        <div class="glass-card rounded-[32px] p-6 shadow-2xl relative overflow-hidden pointer-events-auto">
+    <div id="view-record" class="view-layer view-layer-bg flex-col justify-end pb-6 px-4">
+        <div class="glass-card rounded-[32px] p-6 shadow-2xl relative overflow-hidden pointer-auto">
             <div id="recording-indicator" class="absolute top-6 right-6 flex items-center space-x-2 hidden">
                 <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
                 <span class="text-xs font-semibold text-red-500 uppercase tracking-wider">Rec</span>
@@ -149,7 +155,7 @@
                 <p class="text-gray-400 text-sm font-medium uppercase tracking-widest mb-1">Duration</p>
                 <h2 id="timer-display" class="text-6xl font-light tabular-nums tracking-tight">00:00:00</h2>
                 
-                <div class="flex justify-center items-center space-x-2 mt-3">
+                <div class="flex justify-center items-center space-x-2 mt-3 flex-wrap gap-2">
                     <!-- Weather Display -->
                     <div id="weather-display" class="inline-flex items-center space-x-1.5 bg-white/10 px-3 py-1 rounded-full text-xs font-medium text-gray-300">
                         <i class="fa-solid fa-cloud-sun"></i> <span>Fetching weather...</span>
@@ -189,7 +195,7 @@
         </div>
     </div>
 
-    <!-- View: Schedule (31-Week Official PDF Plan) -->
+    <!-- View: Schedule (31-Week Official Schedule) -->
     <div id="view-schedule" class="view-layer view-layer-bg flex-col">
         <div class="sticky top-0 z-20 glass-panel px-6 pt-10 pb-4 flex justify-between items-end border-b border-white/10">
             <div>
@@ -268,7 +274,7 @@
 
     <!-- Edit Hike Modal with Week Dropdown Selector -->
     <div id="edit-modal" class="fixed inset-0 z-[9999] hidden items-end justify-center bg-black/60 backdrop-blur-sm transition-opacity">
-        <div class="bg-[#1c1c1e] w-full max-w-md rounded-t-[32px] p-6 pb-12 transform transition-transform border-t border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div class="bg-[#1c1c1e] w-full max-w-md rounded-t-[32px] p-6 pb-12 transform transition-transform border-t border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto pointer-auto">
             <div class="flex justify-between items-center mb-6">
                 <h3 class="text-xl font-bold text-white">Edit Hike Details</h3>
                 <button onclick="closeEditModal()" class="text-gray-400 hover:text-white bg-white/10 rounded-full w-8 h-8 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
@@ -351,44 +357,44 @@
 
     <script>
         const HK_CENTER = [22.3193, 114.1694];
-        const SCHEDULE_STORAGE_KEY = 'hk100_schedule_states_pdf_v31';
-        const COMPLETION_DATES_KEY = 'hk100_completion_dates_v31';
-        const HISTORY_STORAGE_KEY = 'hike_history_pdf_v31';
+        const SCHEDULE_STORAGE_KEY = 'hk100_schedule_states_pdf_v33';
+        const COMPLETION_DATES_KEY = 'hk100_completion_dates_v33';
+        const HISTORY_STORAGE_KEY = 'hike_history_pdf_v33';
         const TOTAL_PEAKS = 100;
 
-        // Exact 31-Week Official PDF Schedule
+        // Exact 31-Week Schedule with precise peak breakdown matching 100 summits
         const hk100Data = [
-            { id: 1, week: 'Week 1', district: 'Shek O', peaks: '打爛埕頂 284m', diff: 'Very short, well-paved (Dragon\'s Back).', time: '2 - 3 hours', lat: 22.2358, lng: 114.2415, peakCount: 1 },
-            { id: 2, week: 'Week 2', district: 'HK Island West', peaks: '太平山 552m, 西高山 493m', diff: 'Highly accessible, mostly paved paths.', time: '3 - 4 hours', lat: 22.2760, lng: 114.1454, peakCount: 2 },
-            { id: 3, week: 'Week 3', district: 'Fanling / Tai Po', peaks: '九龍坑山 440m, 龍山', diff: 'Standard trails, moderate stairs.', time: '4 - 5 hours', lat: 22.4870, lng: 114.1678, peakCount: 2 },
-            { id: 4, week: 'Week 4', district: 'Yuen Long & Tsing Yi', peaks: '四排石山, 春花落 334m', diff: 'Short, distinct district hikes.', time: '3.5 - 4.5 hours', lat: 22.4042, lng: 114.0536, peakCount: 2 },
-            { id: 5, week: 'Week 5', district: 'Sha Tin Foothills', peaks: '女婆山 399m, 水泉澳 372m, 狗肚山 399m, 鹿山 408m', diff: 'Scattered but very short neighborhood hills.', time: '4 - 5 hours', lat: 22.3880, lng: 114.2090, peakCount: 4 },
-            { id: 6, week: 'Week 6', district: 'HK Island East', peaks: '柏架山, 畢拿山 435m, 渣甸山 433m, 小馬山 424m', diff: 'Maintained HK Trail, gradual stairs.', time: '4 - 5 hours', lat: 22.2660, lng: 114.2190, peakCount: 4 },
-            { id: 7, week: 'Week 7', district: 'Lion & Beacon Hill', peaks: '獅子山 495m, 筆架山 457m, 鷹巢山標高柱 312m', diff: 'Very popular, well-trodden MacLehose sections.', time: '3.5 - 4.5 hours', lat: 22.3520, lng: 114.1860, peakCount: 3 },
-            { id: 8, week: 'Week 8', district: 'Ma On Shan West', peaks: '東洋山 532m, 鹿巢山 414m', diff: 'Relatively quick ascents from high starting points.', time: '4.5 - 5.5 hours', lat: 22.3950, lng: 114.2300, peakCount: 2 },
-            { id: 9, week: 'Week 9', district: 'Clear Water Bay', peaks: '鷓鴣山 432m, 大上托 399m, 釣魚翁 344m, 五桂山 304m', diff: 'High Junk Peak is a bit steep, but routes are short.', time: '4 - 5 hours', lat: 22.3000, lng: 114.2840, peakCount: 4 },
-            { id: 10, week: 'Week 10', district: 'Mui Wo', peaks: '老虎頭 465m, 老人山 303m', diff: 'Smooth island trails, low-to-moderate elevation.', time: '5 - 6 hours', lat: 22.2740, lng: 114.0040, peakCount: 2 },
-            { id: 11, week: 'Week 11', district: 'HK Island South', peaks: '金馬倫山 439m, 聶高信山 429m, 紫羅蘭山 433m, 孖崗山 386m', diff: 'Thousands of steep stairs (The Twins).', time: '5 - 6 hours', lat: 22.2590, lng: 114.1850, peakCount: 4 },
-            { id: 12, week: 'Week 12', district: 'Shing Mun', peaks: '草山 647m, 針山 532m, 金山 369m, 孖指徑 337m', diff: 'Long MacLehose distance with sharp climbs (Needle Hill).', time: '5.5 - 6.5 hours', lat: 22.3990, lng: 114.1560, peakCount: 4 },
-            { id: 13, week: 'Week 13', district: 'Yuen Tsuen Trail', peaks: '蓮花山 578m, 鱷魚朝天 559m, 石龍拱 474m, 下花山 315m', diff: 'Long distance but fairly gradual inclines.', time: '5 - 6 hours', lat: 22.3980, lng: 114.0760, peakCount: 4 },
-            { id: 14, week: 'Week 14', district: 'North District', peaks: '紅花嶺 492m, 紅花寨 487m, 龜頭嶺 486m', diff: 'Remote border hills, steady climbs.', time: '4.5 - 5.5 hours', lat: 22.5410, lng: 114.1900, peakCount: 3 },
-            { id: 15, week: 'Week 15', district: 'Plover Cove', peaks: '吊燈籠 416m, 馬頭峰 295m', diff: 'Tiu Tang Lung involves a very steep dirt scramble.', time: '5 - 6 hours', lat: 22.5060, lng: 114.2640, peakCount: 2 },
-            { id: 16, week: 'Week 16', district: 'Sai Kung Central', peaks: '大枕蓋 408m, 太墩 317m, 雞公山 399m', diff: 'Very steep ascents, but medium overall distance.', time: '6 - 7 hours', lat: 22.4040, lng: 114.3210, peakCount: 3 },
-            { id: 17, week: 'Week 17', district: 'Kau Keng & Tai Lam', peaks: '九逕山 507m, 桃坑峒 344m', diff: 'Relentless stairs and loose gravel.', time: '5 - 6.5 hours', lat: 22.3870, lng: 113.9870, peakCount: 2 },
-            { id: 18, week: 'Week 18', district: 'Kowloon Peak', peaks: '飛鵝山 602m, 象山 585m, 大老山 577m, 東山 544m, 慈雲山 490m', diff: 'High elevation, but accessible via Fei Ngo Shan Road.', time: '4.5 - 5.5 hours', lat: 22.3380, lng: 114.2230, peakCount: 5 },
-            { id: 19, week: 'Week 19', district: 'Sai Kung East', peaks: '西灣山 314m, 大蚊山 370m', diff: 'Bushwhacking required for Tai Mun Shan.', time: '5.5 - 6.5 hours', lat: 22.3980, lng: 114.3770, peakCount: 2 },
-            { id: 20, week: 'Week 20', district: 'Buffalo Hills', peaks: '水牛山 606m, 黃牛山 604m, 石芽山 544m', diff: 'High, exposed, and steep grassy slopes.', time: '5 - 6 hours', lat: 22.3820, lng: 114.2370, peakCount: 3 },
-            { id: 21, week: 'Week 21', district: 'SW Lantau', peaks: '觀音山 434m, 深坑瀝 431m, 牙鷹山 374m, 獅山 322m', diff: 'Very remote, rugged, and bushy terrain.', time: '5.5 - 7 hours', lat: 22.2210, lng: 113.8670, peakCount: 4 },
-            { id: 22, week: 'Week 22', district: 'West Lantau', peaks: '靈會山 490m, 大磡森 466m, 羗山 459m, 象山 449m', diff: 'Lantau Trail S4/S5 involves endless ups and downs.', time: '5 - 6.5 hours', lat: 22.2350, lng: 113.8820, peakCount: 4 },
-            { id: 23, week: 'Week 23', district: 'Tung Chung', peaks: '大刀屻 529m, 婆髻山 482m', diff: 'Immediate, steep continuous ascent from sea level.', time: '4.5 - 6 hours', lat: 22.2880, lng: 113.9530, peakCount: 2 },
-            { id: 24, week: 'Week 24', district: 'Tai Mo Shan', peaks: '大帽山 Tai Mo Shan, 四方山 784m, 妙高台 779m, 禾秧山 767m', diff: 'Highest elevation in HK; Wo Yeung requires off-trail navigation.', time: '7 - 8 hours', lat: 22.4100, lng: 114.1240, peakCount: 4 },
-            { id: 25, week: 'Week 25', district: 'Pat Sin Leng', peaks: '黃嶺 639m, 八仙嶺純陽峰 590m, 犂壁山 550m, 屏風山 529m', diff: 'Massive stairway, long and exhausting ridge walk.', time: '6 - 7.5 hours', lat: 22.4890, lng: 114.2070, peakCount: 4 },
-            { id: 26, week: 'Week 26', district: 'Sunset Peak', peaks: '大東山 869m, 二東山 749m, 蓮花山 766m, 鴨腳瀝 722m', diff: 'Over 800m of immediate, relentless climbing.', time: '6 - 7.5 hours', lat: 22.2560, lng: 113.9530, peakCount: 4 },
-            { id: 27, week: 'Week 27', district: 'Sharp Peak', peaks: '蚺蛇尖 468m, 石屋山 481m, 畫眉山 391m, 雷打石 379m', diff: 'Nam She Tsim is notoriously steep and requires scrambling.', time: '7 - 8.5 hours', lat: 22.4310, lng: 114.3640, peakCount: 4 },
-            { id: 28, week: 'Week 28', district: 'Tai To Yan & Kai Kung', peaks: '雞公嶺 585m, 大刀屻 566m, 北大刀屻 480m', diff: 'Two entirely separate, massive, fully exposed ridge walks.', time: '8 - 9 hours', lat: 22.4640, lng: 114.0850, peakCount: 3 },
-            { id: 29, week: 'Week 29', district: 'Castle Peak Hinterlands', peaks: '青山 583m, 乾山 394m, 圓頭山 375m, 花香爐頂 310m', diff: 'Cup and Pour ridge features eroded badlands.', time: '7 - 8.5 hours', lat: 22.3980, lng: 113.9530, peakCount: 4 },
-            { id: 30, week: 'Week 30', district: 'Ma On Shan Traverse', peaks: '馬鞍山 702m, 牛押山 677m, 吊手岩 588m, 彎曲山 592m, 大金鐘 536m', diff: 'Tiu Shau Ngam involves serious vertical rock scramble.', time: '7 - 8 hours', lat: 22.4090, lng: 114.2520, peakCount: 5 },
-            { id: 31, week: 'Week 31', district: 'Dog\'s Teeth & Lantau Peak', peaks: '鳳凰山 934m, 彌勒山 751m, 狗牙嶺 539m, 中狗牙嶺 428m', diff: 'Kau Nga Ling is premier sheer drop scrambling route.', time: '7 - 8.5 hours', lat: 22.2490, lng: 113.9200, peakCount: 4 }
+            { id: 1, week: 'Week 1', district: 'Shek O', peaks: '打爛埕頂 284m', diff: 'Very short, well-paved (Dragon\'s Back).', time: '2-3 hours', lat: 22.2358, lng: 114.2415, peakCount: 1 },
+            { id: 2, week: 'Week 2', district: 'HK Island West', peaks: '太平山 552m, 西高山 493m', diff: 'Highly accessible, mostly paved paths.', time: '3-4 hours', lat: 22.2760, lng: 114.1454, peakCount: 2 },
+            { id: 3, week: 'Week 3', district: 'Fanling / Tai Po', peaks: '九龍坑山 440m, 龍山', diff: 'Standard trails, moderate stairs.', time: '4-5 hours', lat: 22.4870, lng: 114.1678, peakCount: 2 },
+            { id: 4, week: 'Week 4', district: 'Yuen Long & Tsing Yi', peaks: '四排石山, 春花落 334m', diff: 'Short, distinct district hikes.', time: '3.5-4.5 hours', lat: 22.4042, lng: 114.0536, peakCount: 2 },
+            { id: 5, week: 'Week 5', district: 'Sha Tin Foothills', peaks: '女婆山 399m, 水泉澳 372m, 狗肚山 399m, 鹿山 408m', diff: 'Scattered neighborhood hills.', time: '4-5 hours', lat: 22.3880, lng: 114.2090, peakCount: 4 },
+            { id: 6, week: 'Week 6', district: 'HK Island East', peaks: '柏架山, 畢拿山 435m, 渣甸山 433m, 小馬山 424m', diff: 'Maintained HK Trail, gradual stairs.', time: '4-5 hours', lat: 22.2660, lng: 114.2190, peakCount: 4 },
+            { id: 7, week: 'Week 7', district: 'Lion & Beacon Hill', peaks: '獅子山 495m, 筆架山 457m, 鷹巢山標高柱', diff: 'Very popular, well-trodden MacLehose sections.', time: '3.5-4.5 hours', lat: 22.3520, lng: 114.1860, peakCount: 3 },
+            { id: 8, week: 'Week 8', district: 'Ma On Shan West', peaks: '東洋山 532m, 鹿巢山 414m', diff: 'Relatively quick ascents from high starting points.', time: '4.5-5.5 hours', lat: 22.3950, lng: 114.2300, peakCount: 2 },
+            { id: 9, week: 'Week 9', district: 'Clear Water Bay', peaks: '鷓鴣山 432m, 大上托 399m, 釣魚翁 344m, 五桂山 304m', diff: 'High Junk Peak is steep, but routes are short.', time: '4-5 hours', lat: 22.3000, lng: 114.2840, peakCount: 4 },
+            { id: 10, week: 'Week 10', district: 'Mui Wo', peaks: '老虎頭 465m, 老人山 303m', diff: 'Smooth island trails, low-to-moderate elevation.', time: '5-6 hours', lat: 22.2740, lng: 114.0040, peakCount: 2 },
+            { id: 11, week: 'Week 11', district: 'HK Island South', peaks: '金馬倫山 439m, 聶高信山 429m, 紫羅蘭山 433m, 孖崗山 386m', diff: 'Thousands of steep stairs (The Twins).', time: '5-6 hours', lat: 22.2590, lng: 114.1850, peakCount: 4 },
+            { id: 12, week: 'Week 12', district: 'Shing Mun', peaks: '草山 647m, 針山 532m, 金山 369m, 孖指徑 337m', diff: 'Long MacLehose distance with sharp climbs.', time: '5.5-6.5 hours', lat: 22.3990, lng: 114.1560, peakCount: 4 },
+            { id: 13, week: 'Week 13', district: 'Yuen Tsuen Trail', peaks: '蓮花山 578m, 鱷魚朝天 559m, 石龍拱 474m, 下花山 315m', diff: 'Long distance but fairly gradual inclines.', time: '5-6 hours', lat: 22.3980, lng: 114.0760, peakCount: 4 },
+            { id: 14, week: 'Week 14', district: 'North District', peaks: '紅花嶺 492m, 紅花寨 487m, 龜頭嶺 486m', diff: 'Remote border hills, steady climbs.', time: '4.5-5.5 hours', lat: 22.5410, lng: 114.1900, peakCount: 3 },
+            { id: 15, week: 'Week 15', district: 'Plover Cove', peaks: '吊燈籠 416m, 馬頭峰', diff: 'Tiu Tang Lung involves a very steep dirt scramble.', time: '5-6 hours', lat: 22.5060, lng: 114.2640, peakCount: 2 },
+            { id: 16, week: 'Week 16', district: 'Sai Kung Central', peaks: '大枕蓋 408m, 太墩 317m, 雞公山 399m', diff: 'Very steep ascents, medium overall distance.', time: '6-7 hours', lat: 22.4040, lng: 114.3210, peakCount: 3 },
+            { id: 17, week: 'Week 17', district: 'Kau Keng & Tai Lam', peaks: '九逕山 507m, 桃坑峒 344m', diff: 'Relentless stairs and loose gravel.', time: '5-6.5 hours', lat: 22.3870, lng: 113.9870, peakCount: 2 },
+            { id: 18, week: 'Week 18', district: 'Kowloon Peak', peaks: '飛鵝山 602m, 象山 585m, 大老山 577m, 東山 544m, 慈雲山 490m', diff: 'High elevation, accessible via Fei Ngo Shan Road.', time: '4.5-5.5 hours', lat: 22.3380, lng: 114.2230, peakCount: 5 },
+            { id: 19, week: 'Week 19', district: 'Sai Kung East', peaks: '西灣山 314m, 大蚊山 370m', diff: 'Bushwhacking required for Tai Mun Shan.', time: '5.5-6.5 hours', lat: 22.3980, lng: 114.3770, peakCount: 2 },
+            { id: 20, week: 'Week 20', district: 'Buffalo Hills', peaks: '水牛山 606m, 黃牛山 604m, 石芽山 544m', diff: 'High, exposed, and steep grassy slopes.', time: '5-6 hours', lat: 22.3820, lng: 114.2370, peakCount: 3 },
+            { id: 21, week: 'Week 21', district: 'SW Lantau', peaks: '觀音山 434m, 深坑瀝 431m, 牙鷹山 374m, 獅山 322m', diff: 'Very remote, rugged, and bushy terrain.', time: '5.5-7 hours', lat: 22.2210, lng: 113.8670, peakCount: 4 },
+            { id: 22, week: 'Week 22', district: 'West Lantau', peaks: '靈會山 490m, 大磡森 466m, 羗山 459m, 象山 449m', diff: 'Lantau Trail S4/S5 endless ups and downs.', time: '5-6.5 hours', lat: 22.2350, lng: 113.8820, peakCount: 4 },
+            { id: 23, week: 'Week 23', district: 'Tung Chung', peaks: '大刀屻 529m, 婆髻山 482m', diff: 'Immediate, steep continuous ascent from sea level.', time: '4.5-6 hours', lat: 22.2880, lng: 113.9530, peakCount: 2 },
+            { id: 24, week: 'Week 24', district: 'Tai Mo Shan', peaks: '大帽山 Tai Mo Shan, 四方山 784m, 妙高台 779m, 禾秧山 767m', diff: 'Highest elevation in HK.', time: '7-8 hours', lat: 22.4100, lng: 114.1240, peakCount: 4 },
+            { id: 25, week: 'Week 25', district: 'Pat Sin Leng', peaks: '黃嶺 639m, 八仙嶺純陽峰 590m, 犂壁山 550m, 屏風山 529m', diff: 'Massive stairway, long and exhausting ridge walk.', time: '6-7.5 hours', lat: 22.4890, lng: 114.2070, peakCount: 4 },
+            { id: 26, week: 'Week 26', district: 'Sunset Peak', peaks: '大東山 869m, 二東山 749m, 蓮花山 766m, 鴨腳瀝 722m', diff: 'Over 800m of immediate, relentless climbing.', time: '6-7.5 hours', lat: 22.2560, lng: 113.9530, peakCount: 4 },
+            { id: 27, week: 'Week 27', district: 'Sharp Peak', peaks: '蚺蛇尖 468m, 石屋山 481m, 畫眉山 391m, 雷打石 379m', diff: 'Nam She Tsim is notoriously steep and requires scrambling.', time: '7-8.5 hours', lat: 22.4310, lng: 114.3640, peakCount: 4 },
+            { id: 28, week: 'Week 28', district: 'Tai To Yan & Kai Kung', peaks: '雞公嶺 585m, 大刀屻 566m, 北大刀屻 480m', diff: 'Two separate, massive, fully exposed ridge walks.', time: '8-9 hours', lat: 22.4640, lng: 114.0850, peakCount: 3 },
+            { id: 29, week: 'Week 29', district: 'Castle Peak Hinterlands', peaks: '青山 583m, 乾山 394m, 圓頭山 375m, 花香爐頂 310m', diff: 'Cup and Pour ridge features eroded badlands.', time: '7-8.5 hours', lat: 22.3980, lng: 113.9530, peakCount: 4 },
+            { id: 30, week: 'Week 30', district: 'Ma On Shan Traverse', peaks: '馬鞍山 702m, 牛押山 677m, 吊手岩 588m, 彎曲山 592m, 大金鐘 536m', diff: 'Tiu Shau Ngam vertical rock scramble.', time: '7-8 hours', lat: 22.4090, lng: 114.2520, peakCount: 5 },
+            { id: 31, week: 'Week 31', district: 'Dog\'s Teeth & Lantau Peak', peaks: '鳳凰山 934m, 彌勒山 751m, 狗牙嶺 539m, 中狗牙嶺 428m', diff: 'Kau Nga Ling sheer drop scrambling route.', time: '7-8.5 hours', lat: 22.2490, lng: 113.9200, peakCount: 4 }
         ];
 
         let map;
@@ -467,8 +473,10 @@
                 attributionControl: false
             }).setView(HK_CENTER, 11);
             
-            L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-                maxZoom: 17,
+            // Google Maps Terrain Tile Layer (lyrs=p)
+            L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
             }).addTo(map);
 
             trackLayer = L.polyline([], { color: '#0A84FF', weight: 6, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }).addTo(map);
@@ -531,7 +539,6 @@
             const lng = position.coords.longitude;
             const latLng = [lat, lng];
             
-            // Update location display in Record section
             const locText = document.getElementById('location-text');
             if (locText) {
                 locText.innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
