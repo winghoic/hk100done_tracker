@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>HK 100 Peaks Tracker</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --safe-area-top: env(safe-area-inset-top, 0px);
+            --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #000;
+            color: white;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .glass-panel {
+            background: rgba(30, 30, 30, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        
+        .glass-card {
+            background: rgba(40, 40, 40, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tab-bar {
+            padding-bottom: calc(15px + var(--safe-area-bottom));
+            padding-top: 10px;
+            z-index: 50;
+        }
+        
+        .tab-icon {
+            color: #8E8E93;
+            transition: all 0.2s ease;
+        }
+        .tab-active {
+            color: #0A84FF;
+        }
+
+        .view-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: calc(100% - 75px - var(--safe-area-bottom));
+            z-index: 10;
+            display: none !important;
+            overflow-y: auto;
+            padding-top: var(--safe-area-top);
+        }
+        .view-layer.active {
+            display: flex !important;
+        }
+        
+        .view-layer-bg {
+            background-color: #000;
+            z-index: 15;
+        }
+
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        
+        .leaflet-popup-content-wrapper {
+            background: rgba(30, 30, 30, 0.95) !important;
+            backdrop-filter: blur(12px);
+            color: white !important;
+            border-radius: 14px !important;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        .leaflet-popup-tip {
+            background: rgba(30, 30, 30, 0.95) !important;
+        }
+
+        #ios-alert-overlay {
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 99999;
+            display: none;
+        }
+        .ios-alert-box {
+            background: rgba(40, 40, 40, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 14px;
+            width: 270px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <!-- Map Zoom Floating Controls -->
+    <div id="map-zoom-controls" class="absolute right-4 top-20 z-20 flex flex-col space-y-2">
+        <button onclick="map.zoomIn()" class="w-11 h-11 glass-card rounded-2xl flex items-center justify-center text-white active:scale-95 shadow-lg"><i class="fa-solid fa-plus text-sm"></i></button>
+        <button onclick="map.zoomOut()" class="w-11 h-11 glass-card rounded-2xl flex items-center justify-center text-white active:scale-95 shadow-lg"><i class="fa-solid fa-minus text-sm"></i></button>
+    </div>
+
+    <!-- View: Map (Clean overview showing all 100 peak pinpoints) -->
+    <div id="view-map" class="view-layer flex-col pt-12 px-4 items-center pointer-events-none">
+        <div class="glass-card px-5 py-2.5 rounded-full flex items-center space-x-3 shadow-lg pointer-events-auto">
+            <div class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+            <span id="map-peaks-remaining" class="text-[15px] font-semibold text-white tracking-wide">Calculating...</span>
+        </div>
+    </div>
+
+    <!-- View: Record (Tracking UI) -->
+    <div id="view-record" class="view-layer flex-col justify-end pb-6 px-4">
+        <div class="glass-card rounded-[32px] p-6 shadow-2xl relative overflow-hidden pointer-events-auto">
+            <div id="recording-indicator" class="absolute top-6 right-6 flex items-center space-x-2 hidden">
+                <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+                <span class="text-xs font-semibold text-red-500 uppercase tracking-wider">Rec</span>
+            </div>
+            
+            <div class="text-center mb-6 pt-2">
+                <p class="text-gray-400 text-sm font-medium uppercase tracking-widest mb-1">Duration</p>
+                <h2 id="timer-display" class="text-6xl font-light tabular-nums tracking-tight">00:00:00</h2>
+                
+                <div class="flex justify-center items-center space-x-2 mt-3">
+                    <!-- Weather Display -->
+                    <div id="weather-display" class="inline-flex items-center space-x-1.5 bg-white/10 px-3 py-1 rounded-full text-xs font-medium text-gray-300">
+                        <i class="fa-solid fa-cloud-sun"></i> <span>Fetching weather...</span>
+                    </div>
+                    <!-- Current Location Display -->
+                    <div id="location-display" class="inline-flex items-center space-x-1.5 bg-white/10 px-3 py-1 rounded-full text-xs font-medium text-gray-300">
+                        <i class="fa-solid fa-location-crosshairs text-[#0A84FF]"></i> <span id="location-text">Acquiring GPS...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-8">
+                <div class="bg-white/5 rounded-2xl p-4 text-center">
+                    <p class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Distance</p>
+                    <p class="text-2xl font-bold"><span id="distance-display">0.00</span> <span class="text-sm font-normal text-gray-400">km</span></p>
+                </div>
+                <div class="bg-white/5 rounded-2xl p-4 text-center">
+                    <p class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Pace</p>
+                    <p class="text-2xl font-bold"><span id="pace-display">--</span> <span class="text-sm font-normal text-gray-400">/km</span></p>
+                </div>
+            </div>
+            
+            <div class="flex justify-center space-x-4">
+                <button id="btn-start" onclick="startTracking()" class="w-20 h-20 bg-[#0A84FF] rounded-full flex justify-center items-center shadow-[0_0_20px_rgba(10,132,255,0.4)] active:scale-95 transition-transform">
+                    <i class="fa-solid fa-play text-2xl text-white ml-1"></i>
+                </button>
+                <button id="btn-pause" onclick="pauseTracking()" class="hidden w-20 h-20 bg-yellow-500 rounded-full flex justify-center items-center shadow-[0_0_20px_rgba(234,179,8,0.4)] active:scale-95 transition-transform">
+                    <i class="fa-solid fa-pause text-2xl text-white"></i>
+                </button>
+                <button id="btn-resume" onclick="resumeTracking()" class="hidden w-20 h-20 bg-[#0A84FF] rounded-full flex justify-center items-center shadow-[0_0_20px_rgba(10,132,255,0.4)] active:scale-95 transition-transform">
+                    <i class="fa-solid fa-play text-2xl text-white ml-1"></i>
+                </button>
+                <button id="btn-stop" onclick="stopTracking()" class="hidden w-20 h-20 bg-red-500 rounded-full flex justify-center items-center shadow-[0_0_20px_rgba(239,68,68,0.4)] active:scale-95 transition-transform">
+                    <i class="fa-solid fa-stop text-2xl text-white"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View: Schedule (31-Week Official PDF Plan) -->
+    <div id="view-schedule" class="view-layer view-layer-bg flex-col">
+        <div class="sticky top-0 z-20 glass-panel px-6 pt-10 pb-4 flex justify-between items-end border-b border-white/10">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight text-white mb-1">Schedule</h1>
+                <p class="text-gray-400 text-sm font-medium">HK 100 Challenge (31 Weeks)</p>
+            </div>
+            <div class="text-right">
+                <p id="scheduleProgressText" class="text-[#0A84FF] font-bold text-lg">0/100 Peaks</p>
+            </div>
+        </div>
+        
+        <div id="schedule-list" class="pb-32 pt-4 space-y-4">
+            <!-- Schedule cards injected by JS -->
+        </div>
+
+        <div class="fixed bottom-24 right-4 z-30 pointer-events-none">
+            <div class="glass-card rounded-full p-2 shadow-2xl flex items-center justify-center relative">
+                <svg width="60" height="60" class="transform -rotate-90">
+                    <circle cx="30" cy="30" r="26" stroke="rgba(255,255,255,0.1)" stroke-width="6" fill="none"></circle>
+                    <circle id="progressRingSvg" cx="30" cy="30" r="26" stroke="#0A84FF" stroke-width="6" fill="none" stroke-dasharray="163.36" stroke-dashoffset="163.36" stroke-linecap="round" class="transition-all duration-500 ease-in-out"></circle>
+                </svg>
+                <div class="absolute inset-0 flex items-center justify-center flex-col">
+                    <span id="progressRingPercent" class="text-xs font-bold text-white">0%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View: History -->
+    <div id="view-history" class="view-layer view-layer-bg flex-col">
+        <div class="px-6 pt-10 pb-4 sticky top-0 glass-panel z-20 border-b border-white/10 flex justify-between items-center">
+            <h1 class="text-3xl font-bold tracking-tight">History</h1>
+        </div>
+        <div id="history-list" class="p-4 space-y-4 pb-24">
+            <!-- History items injected by JS -->
+        </div>
+    </div>
+
+    <!-- View: Profile -->
+    <div id="view-profile" class="view-layer view-layer-bg flex-col">
+        <div class="px-6 pt-10 pb-4 sticky top-0 glass-panel z-20 border-b border-white/10">
+            <h1 class="text-3xl font-bold tracking-tight">Profile</h1>
+        </div>
+        <div class="p-6 space-y-6">
+            <div class="glass-card rounded-3xl p-6">
+                <h2 class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-4">Lifetime Stats</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-4xl font-bold text-white" id="total-distance">0.0</p>
+                        <p class="text-sm text-gray-500 mt-1 font-medium">Total km</p>
+                    </div>
+                    <div>
+                        <p class="text-4xl font-bold text-white" id="total-time">0h</p>
+                        <p class="text-sm text-gray-500 mt-1 font-medium">Total time</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card rounded-3xl p-6">
+                <h2 class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-4">Awards</h2>
+                <div class="flex items-center space-x-4 bg-white/5 p-4 rounded-2xl border border-white/10">
+                    <div id="hk100BadgeIcon" class="w-16 h-16 rounded-full bg-gray-800 border-2 border-gray-600 flex items-center justify-center shrink-0 transition-all duration-500">
+                        <i class="fa-solid fa-mountain text-gray-500 text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg leading-tight text-white">HONG KONG 100 Done</h3>
+                        <p class="text-xs text-gray-400 mt-1">Complete all 100 peaks.</p>
+                        <div class="mt-2 text-xs font-bold text-[#0A84FF] bg-[#0A84FF]/20 inline-block px-2.5 py-1 rounded-md">
+                            <span id="hk100BadgeCount">0 / 100</span> Peaks
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Hike Modal with Week Dropdown Selector -->
+    <div id="edit-modal" class="fixed inset-0 z-[9999] hidden items-end justify-center bg-black/60 backdrop-blur-sm transition-opacity">
+        <div class="bg-[#1c1c1e] w-full max-w-md rounded-t-[32px] p-6 pb-12 transform transition-transform border-t border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-white">Edit Hike Details</h3>
+                <button onclick="closeEditModal()" class="text-gray-400 hover:text-white bg-white/10 rounded-full w-8 h-8 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Route Name</label>
+                    <input type="text" id="edit-route-name" class="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#0A84FF] text-sm" placeholder="Hike Route Name">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Link to HK 100 Schedule Week (Completes Peaks)</label>
+                    <select id="edit-week-select" class="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#0A84FF] text-sm">
+                        <option value="">-- None (Free Hike) --</option>
+                        <!-- Injected via JS -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Notes & Comments</label>
+                    <textarea id="edit-comment" rows="3" class="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#0A84FF] text-sm" placeholder="How was the trail? Any challenges?"></textarea>
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Trail Photo</label>
+                    <input type="file" id="edit-photo-input" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
+                    <button onclick="document.getElementById('edit-photo-input').click()" class="w-full py-3.5 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl text-[#0A84FF] font-semibold flex items-center justify-center space-x-2 transition-colors">
+                        <i class="fa-solid fa-camera"></i> <span>Choose Photo</span>
+                    </button>
+                    
+                    <div class="mt-4 relative hidden" id="edit-photo-container">
+                        <img id="edit-photo-preview" class="w-full h-48 object-cover rounded-xl border border-white/10">
+                        <button onclick="removePhoto()" class="absolute top-2 right-2 bg-black/60 text-white w-8 h-8 rounded-full flex items-center justify-center hover:bg-red-500 transition-colors"><i class="fa-solid fa-trash text-xs"></i></button>
+                    </div>
+                </div>
+                
+                <button onclick="saveEdit()" class="w-full py-4 bg-[#0A84FF] text-white font-bold rounded-xl mt-2 active:scale-[0.98] transition-transform">Save Updates</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Tab Navigation Bar -->
+    <div class="glass-panel tab-bar fixed bottom-0 left-0 w-full flex justify-around items-center">
+        <button onclick="switchTab('map')" class="flex flex-col items-center p-2 w-16 group" id="tab-btn-map">
+            <i class="fa-solid fa-map text-xl mb-1 tab-icon tab-active group-active:scale-90" id="tab-icon-map"></i>
+            <span class="text-[10px] font-medium tab-icon tab-active" id="tab-text-map">Map</span>
+        </button>
+        <button onclick="switchTab('record')" class="flex flex-col items-center p-2 w-16 group" id="tab-btn-record">
+            <i class="fa-solid fa-route text-xl mb-1 tab-icon group-active:scale-90" id="tab-icon-record"></i>
+            <span class="text-[10px] font-medium tab-icon" id="tab-text-record">Record</span>
+        </button>
+        <button onclick="switchTab('schedule')" class="flex flex-col items-center p-2 w-16 group" id="tab-btn-schedule">
+            <i class="fa-solid fa-tasks text-xl mb-1 tab-icon group-active:scale-90" id="tab-icon-schedule"></i>
+            <span class="text-[10px] font-medium tab-icon" id="tab-text-schedule">Schedule</span>
+        </button>
+        <button onclick="switchTab('history')" class="flex flex-col items-center p-2 w-16 group" id="tab-btn-history">
+            <i class="fa-solid fa-clock-rotate-left text-xl mb-1 tab-icon group-active:scale-90" id="tab-icon-history"></i>
+            <span class="text-[10px] font-medium tab-icon" id="tab-text-history">History</span>
+        </button>
+        <button onclick="switchTab('profile')" class="flex flex-col items-center p-2 w-16 group" id="tab-btn-profile">
+            <i class="fa-solid fa-user text-xl mb-1 tab-icon group-active:scale-90" id="tab-icon-profile"></i>
+            <span class="text-[10px] font-medium tab-icon" id="tab-text-profile">Profile</span>
+        </button>
+    </div>
+
+    <!-- iOS Alert Box -->
+    <div id="ios-alert-overlay" class="fixed inset-0 flex items-center justify-center">
+        <div class="ios-alert-box flex flex-col text-center">
+            <div class="p-5">
+                <h3 id="ios-alert-title" class="text-[17px] font-semibold text-white mb-1">Title</h3>
+                <p id="ios-alert-message" class="text-[13px] text-gray-300 leading-tight">Message goes here.</p>
+            </div>
+            <div id="ios-alert-buttons" class="flex border-t border-white/10"></div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        const HK_CENTER = [22.3193, 114.1694];
+        const SCHEDULE_STORAGE_KEY = 'hk100_schedule_states_pdf_v31';
+        const COMPLETION_DATES_KEY = 'hk100_completion_dates_v31';
+        const HISTORY_STORAGE_KEY = 'hike_history_pdf_v31';
+        const TOTAL_PEAKS = 100;
+
+        // Exact 31-Week Official PDF Schedule
+        const hk100Data = [
+            { id: 1, week: 'Week 1', district: 'Shek O', peaks: '打爛埕頂 284m', diff: 'Very short, well-paved (Dragon\'s Back).', time: '2 - 3 hours', lat: 22.2358, lng: 114.2415, peakCount: 1 },
+            { id: 2, week: 'Week 2', district: 'HK Island West', peaks: '太平山 552m, 西高山 493m', diff: 'Highly accessible, mostly paved paths.', time: '3 - 4 hours', lat: 22.2760, lng: 114.1454, peakCount: 2 },
+            { id: 3, week: 'Week 3', district: 'Fanling / Tai Po', peaks: '九龍坑山 440m, 龍山', diff: 'Standard trails, moderate stairs.', time: '4 - 5 hours', lat: 22.4870, lng: 114.1678, peakCount: 2 },
+            { id: 4, week: 'Week 4', district: 'Yuen Long & Tsing Yi', peaks: '四排石山, 春花落 334m', diff: 'Short, distinct district hikes.', time: '3.5 - 4.5 hours', lat: 22.4042, lng: 114.0536, peakCount: 2 },
+            { id: 5, week: 'Week 5', district: 'Sha Tin Foothills', peaks: '女婆山 399m, 水泉澳 372m, 狗肚山 399m, 鹿山 408m', diff: 'Scattered but very short neighborhood hills.', time: '4 - 5 hours', lat: 22.3880, lng: 114.2090, peakCount: 4 },
+            { id: 6, week: 'Week 6', district: 'HK Island East', peaks: '柏架山, 畢拿山 435m, 渣甸山 433m, 小馬山 424m', diff: 'Maintained HK Trail, gradual stairs.', time: '4 - 5 hours', lat: 22.2660, lng: 114.2190, peakCount: 4 },
+            { id: 7, week: 'Week 7', district: 'Lion & Beacon Hill', peaks: '獅子山 495m, 筆架山 457m, 鷹巢山標高柱 312m', diff: 'Very popular, well-trodden MacLehose sections.', time: '3.5 - 4.5 hours', lat: 22.3520, lng: 114.1860, peakCount: 3 },
+            { id: 8, week: 'Week 8', district: 'Ma On Shan West', peaks: '東洋山 532m, 鹿巢山 414m', diff: 'Relatively quick ascents from high starting points.', time: '4.5 - 5.5 hours', lat: 22.3950, lng: 114.2300, peakCount: 2 },
+            { id: 9, week: 'Week 9', district: 'Clear Water Bay', peaks: '鷓鴣山 432m, 大上托 399m, 釣魚翁 344m, 五桂山 304m', diff: 'High Junk Peak is a bit steep, but routes are short.', time: '4 - 5 hours', lat: 22.3000, lng: 114.2840, peakCount: 4 },
+            { id: 10, week: 'Week 10', district: 'Mui Wo', peaks: '老虎頭 465m, 老人山 303m', diff: 'Smooth island trails, low-to-moderate elevation.', time: '5 - 6 hours', lat: 22.2740, lng: 114.0040, peakCount: 2 },
+            { id: 11, week: 'Week 11', district: 'HK Island South', peaks: '金馬倫山 439m, 聶高信山 429m, 紫羅蘭山 433m, 孖崗山 386m', diff: 'Thousands of steep stairs (The Twins).', time: '5 - 6 hours', lat: 22.2590, lng: 114.1850, peakCount: 4 },
+            { id: 12, week: 'Week 12', district: 'Shing Mun', peaks: '草山 647m, 針山 532m, 金山 369m, 孖指徑 337m', diff: 'Long MacLehose distance with sharp climbs (Needle Hill).', time: '5.5 - 6.5 hours', lat: 22.3990, lng: 114.1560, peakCount: 4 },
+            { id: 13, week: 'Week 13', district: 'Yuen Tsuen Trail', peaks: '蓮花山 578m, 鱷魚朝天 559m, 石龍拱 474m, 下花山 315m', diff: 'Long distance but fairly gradual inclines.', time: '5 - 6 hours', lat: 22.3980, lng: 114.0760, peakCount: 4 },
+            { id: 14, week: 'Week 14', district: 'North District', peaks: '紅花嶺 492m, 紅花寨 487m, 龜頭嶺 486m', diff: 'Remote border hills, steady climbs.', time: '4.5 - 5.5 hours', lat: 22.5410, lng: 114.1900, peakCount: 3 },
+            { id: 15, week: 'Week 15', district: 'Plover Cove', peaks: '吊燈籠 416m, 馬頭峰 295m', diff: 'Tiu Tang Lung involves a very steep dirt scramble.', time: '5 - 6 hours', lat: 22.5060, lng: 114.2640, peakCount: 2 },
+            { id: 16, week: 'Week 16', district: 'Sai Kung Central', peaks: '大枕蓋 408m, 太墩 317m, 雞公山 399m', diff: 'Very steep ascents, but medium overall distance.', time: '6 - 7 hours', lat: 22.4040, lng: 114.3210, peakCount: 3 },
+            { id: 17, week: 'Week 17', district: 'Kau Keng & Tai Lam', peaks: '九逕山 507m, 桃坑峒 344m', diff: 'Relentless stairs and loose gravel.', time: '5 - 6.5 hours', lat: 22.3870, lng: 113.9870, peakCount: 2 },
+            { id: 18, week: 'Week 18', district: 'Kowloon Peak', peaks: '飛鵝山 602m, 象山 585m, 大老山 577m, 東山 544m, 慈雲山 490m', diff: 'High elevation, but accessible via Fei Ngo Shan Road.', time: '4.5 - 5.5 hours', lat: 22.3380, lng: 114.2230, peakCount: 5 },
+            { id: 19, week: 'Week 19', district: 'Sai Kung East', peaks: '西灣山 314m, 大蚊山 370m', diff: 'Bushwhacking required for Tai Mun Shan.', time: '5.5 - 6.5 hours', lat: 22.3980, lng: 114.3770, peakCount: 2 },
+            { id: 20, week: 'Week 20', district: 'Buffalo Hills', peaks: '水牛山 606m, 黃牛山 604m, 石芽山 544m', diff: 'High, exposed, and steep grassy slopes.', time: '5 - 6 hours', lat: 22.3820, lng: 114.2370, peakCount: 3 },
+            { id: 21, week: 'Week 21', district: 'SW Lantau', peaks: '觀音山 434m, 深坑瀝 431m, 牙鷹山 374m, 獅山 322m', diff: 'Very remote, rugged, and bushy terrain.', time: '5.5 - 7 hours', lat: 22.2210, lng: 113.8670, peakCount: 4 },
+            { id: 22, week: 'Week 22', district: 'West Lantau', peaks: '靈會山 490m, 大磡森 466m, 羗山 459m, 象山 449m', diff: 'Lantau Trail S4/S5 involves endless ups and downs.', time: '5 - 6.5 hours', lat: 22.2350, lng: 113.8820, peakCount: 4 },
+            { id: 23, week: 'Week 23', district: 'Tung Chung', peaks: '大刀屻 529m, 婆髻山 482m', diff: 'Immediate, steep continuous ascent from sea level.', time: '4.5 - 6 hours', lat: 22.2880, lng: 113.9530, peakCount: 2 },
+            { id: 24, week: 'Week 24', district: 'Tai Mo Shan', peaks: '大帽山 Tai Mo Shan, 四方山 784m, 妙高台 779m, 禾秧山 767m', diff: 'Highest elevation in HK; Wo Yeung requires off-trail navigation.', time: '7 - 8 hours', lat: 22.4100, lng: 114.1240, peakCount: 4 },
+            { id: 25, week: 'Week 25', district: 'Pat Sin Leng', peaks: '黃嶺 639m, 八仙嶺純陽峰 590m, 犂壁山 550m, 屏風山 529m', diff: 'Massive stairway, long and exhausting ridge walk.', time: '6 - 7.5 hours', lat: 22.4890, lng: 114.2070, peakCount: 4 },
+            { id: 26, week: 'Week 26', district: 'Sunset Peak', peaks: '大東山 869m, 二東山 749m, 蓮花山 766m, 鴨腳瀝 722m', diff: 'Over 800m of immediate, relentless climbing.', time: '6 - 7.5 hours', lat: 22.2560, lng: 113.9530, peakCount: 4 },
+            { id: 27, week: 'Week 27', district: 'Sharp Peak', peaks: '蚺蛇尖 468m, 石屋山 481m, 畫眉山 391m, 雷打石 379m', diff: 'Nam She Tsim is notoriously steep and requires scrambling.', time: '7 - 8.5 hours', lat: 22.4310, lng: 114.3640, peakCount: 4 },
+            { id: 28, week: 'Week 28', district: 'Tai To Yan & Kai Kung', peaks: '雞公嶺 585m, 大刀屻 566m, 北大刀屻 480m', diff: 'Two entirely separate, massive, fully exposed ridge walks.', time: '8 - 9 hours', lat: 22.4640, lng: 114.0850, peakCount: 3 },
+            { id: 29, week: 'Week 29', district: 'Castle Peak Hinterlands', peaks: '青山 583m, 乾山 394m, 圓頭山 375m, 花香爐頂 310m', diff: 'Cup and Pour ridge features eroded badlands.', time: '7 - 8.5 hours', lat: 22.3980, lng: 113.9530, peakCount: 4 },
+            { id: 30, week: 'Week 30', district: 'Ma On Shan Traverse', peaks: '馬鞍山 702m, 牛押山 677m, 吊手岩 588m, 彎曲山 592m, 大金鐘 536m', diff: 'Tiu Shau Ngam involves serious vertical rock scramble.', time: '7 - 8 hours', lat: 22.4090, lng: 114.2520, peakCount: 5 },
+            { id: 31, week: 'Week 31', district: 'Dog\'s Teeth & Lantau Peak', peaks: '鳳凰山 934m, 彌勒山 751m, 狗牙嶺 539m, 中狗牙嶺 428m', diff: 'Kau Nga Ling is premier sheer drop scrambling route.', time: '7 - 8.5 hours', lat: 22.2490, lng: 113.9200, peakCount: 4 }
+        ];
+
+        let map;
+        let trackLayer;
+        let historyRouteLayer;
+        let currentPositionMarker;
+        let hk100Markers = [];
+        
+        let positions = [];
+        let isTracking = false;
+        let startTime = null;
+        let distance = 0;
+        let duration = 0;
+        let timerInterval;
+        let geoWatchId = null;
+        let activeTab = 'map';
+        let currentWeatherString = "--";
+        
+        let completedChallenges = JSON.parse(localStorage.getItem(SCHEDULE_STORAGE_KEY)) || {};
+        let completionDates = JSON.parse(localStorage.getItem(COMPLETION_DATES_KEY)) || {};
+
+        function showIOSAlert(title, message, buttons) {
+            document.getElementById('ios-alert-title').innerText = title;
+            document.getElementById('ios-alert-message').innerText = message;
+            
+            const btnContainer = document.getElementById('ios-alert-buttons');
+            btnContainer.innerHTML = ''; 
+            
+            buttons.forEach((btn, index) => {
+                const btnEl = document.createElement('button');
+                btnEl.className = `flex-1 py-3.5 text-[17px] active:bg-white/10 transition-colors ${index !== 0 ? 'border-l border-white/10' : ''} ${btn.style === 'destructive' ? 'text-red-500 font-normal' : (btn.style === 'cancel' ? 'text-[#0A84FF] font-semibold' : 'text-[#0A84FF] font-normal')}`;
+                btnEl.innerText = btn.text;
+                btnEl.onclick = () => {
+                    document.getElementById('ios-alert-overlay').style.display = 'none';
+                    if (btn.action) btn.action();
+                };
+                btnContainer.appendChild(btnEl);
+            });
+            
+            document.getElementById('ios-alert-overlay').style.display = 'flex';
+        }
+
+        async function fetchWeather(lat, lng) {
+            try {
+                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`);
+                const data = await res.json();
+                
+                if (data && data.current_weather) {
+                    const temp = data.current_weather.temperature;
+                    const code = data.current_weather.weathercode;
+                    
+                    let desc = "Clear";
+                    let icon = "fa-sun";
+                    if (code >= 1 && code <= 3) { desc = "Partly Cloudy"; icon = "fa-cloud-sun"; }
+                    else if (code >= 45 && code <= 48) { desc = "Foggy"; icon = "fa-smog"; }
+                    else if (code >= 51 && code <= 67) { desc = "Rain"; icon = "fa-cloud-rain"; }
+                    else if (code >= 71 && code <= 77) { desc = "Snow"; icon = "fa-snowflake"; }
+                    else if (code >= 95) { desc = "Thunderstorm"; icon = "fa-cloud-bolt"; }
+                    
+                    currentWeatherString = `${temp}°C, ${desc}`;
+                    
+                    const display = document.getElementById('weather-display');
+                    if (display) {
+                        display.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${currentWeatherString}</span>`;
+                    }
+                }
+            } catch (err) {
+                console.log("Weather error", err);
+                currentWeatherString = "Weather unavailable";
+            }
+        }
+
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView(HK_CENTER, 11);
+            
+            L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                maxZoom: 17,
+            }).addTo(map);
+
+            trackLayer = L.polyline([], { color: '#0A84FF', weight: 6, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+            historyRouteLayer = L.polyline([], { color: '#34C759', weight: 6, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+            updateMapPins(); 
+        }
+
+        function updateMapPins() {
+            if (!map) return;
+            hk100Markers.forEach(marker => map.removeLayer(marker));
+            hk100Markers = [];
+
+            hk100Data.forEach(item => {
+                const isDone = completedChallenges[item.id] === true;
+                const peakNames = item.peaks.split(',').map(p => p.trim());
+                
+                peakNames.forEach((peakName, idx) => {
+                    const angle = (idx / peakNames.length) * 2 * Math.PI;
+                    const offsetLat = item.lat + (Math.sin(angle) * 0.004);
+                    const offsetLng = item.lng + (Math.cos(angle) * 0.004);
+
+                    const iconHtml = isDone 
+                        ? '<div class="w-6 h-6 bg-[#34C759] rounded-full border-2 border-white flex items-center justify-center shadow-lg"><i class="fa-solid fa-check text-white text-[10px]"></i></div>'
+                        : '<div class="w-5 h-5 bg-gray-600/90 rounded-full border-2 border-gray-300 flex items-center justify-center shadow-md"><i class="fa-solid fa-mountain text-gray-200 text-[8px]"></i></div>';
+                    
+                    const customIcon = L.divIcon({
+                        html: iconHtml,
+                        className: 'custom-pin',
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    });
+
+                    const marker = L.marker([offsetLat, offsetLng], { icon: customIcon }).addTo(map);
+                    
+                    marker.bindPopup(`
+                        <div class="p-3 min-w-[220px]">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">${item.week} • ${item.district}</span>
+                            <b class="block text-[16px] leading-tight text-[#0A84FF] mb-2 font-extrabold">${peakName}</b>
+                            <span class="text-[12px] text-gray-200 block mb-1 font-medium">${item.diff}</span>
+                            <span class="text-[11px] text-gray-400 block"><i class="fa-solid fa-clock mr-1"></i>${item.time}</span>
+                        </div>
+                    `);
+                    hk100Markers.push(marker);
+                });
+            });
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        function handlePosition(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const latLng = [lat, lng];
+            
+            // Update location display in Record section
+            const locText = document.getElementById('location-text');
+            if (locText) {
+                locText.innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            }
+            
+            if (positions.length === 0) {
+                fetchWeather(lat, lng);
+            }
+
+            if (!currentPositionMarker) {
+                currentPositionMarker = L.marker(latLng, {
+                    icon: L.divIcon({
+                        html: '<div class="w-5 h-5 bg-[#0A84FF] rounded-full border-4 border-white shadow-md"></div>',
+                        className: 'current-pos-icon',
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    })
+                }).addTo(map);
+            } else {
+                currentPositionMarker.setLatLng(latLng);
+            }
+
+            if (isTracking) {
+                if (positions.length > 0) {
+                    const lastPos = positions[positions.length - 1];
+                    distance += calculateDistance(lastPos[0], lastPos[1], lat, lng);
+                    document.getElementById('distance-display').innerText = distance.toFixed(2);
+                }
+                positions.push(latLng);
+                trackLayer.setLatLngs(positions);
+            }
+        }
+
+        function handleError(error) {
+            console.warn("Geolocation Error: ", error);
+            const locText = document.getElementById('location-text');
+            if (locText) {
+                locText.innerText = "GPS unavailable";
+            }
+        }
+
+        function startTracking() {
+            isTracking = true;
+            positions = [];
+            distance = 0;
+            duration = 0;
+            trackLayer.setLatLngs([]);
+            historyRouteLayer.setLatLngs([]);
+            
+            document.getElementById('distance-display').innerText = "0.00";
+            document.getElementById('pace-display').innerText = "--";
+            
+            document.getElementById('btn-start').classList.add('hidden');
+            document.getElementById('btn-pause').classList.remove('hidden');
+            document.getElementById('btn-stop').classList.remove('hidden');
+            document.getElementById('recording-indicator').classList.remove('hidden');
+
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        function pauseTracking() {
+            isTracking = false;
+            clearInterval(timerInterval);
+            document.getElementById('btn-pause').classList.add('hidden');
+            document.getElementById('btn-resume').classList.remove('hidden');
+            const indicator = document.getElementById('recording-indicator');
+            if(indicator) {
+                indicator.querySelector('.bg-red-500')?.classList.replace('bg-red-500', 'bg-yellow-500');
+                indicator.querySelector('span').innerText = 'PAUSED';
+                indicator.querySelector('span')?.classList.replace('text-red-500', 'text-yellow-500');
+            }
+        }
+
+        function resumeTracking() {
+            isTracking = true;
+            startTime = Date.now() - (duration * 1000);
+            timerInterval = setInterval(updateTimer, 1000);
+            
+            document.getElementById('btn-resume').classList.add('hidden');
+            document.getElementById('btn-pause').classList.remove('hidden');
+            
+            const indicator = document.getElementById('recording-indicator');
+            if(indicator) {
+                indicator.querySelector('div')?.classList.replace('bg-yellow-500', 'bg-red-500');
+                indicator.querySelector('span').innerText = 'REC';
+                indicator.querySelector('span')?.classList.replace('text-yellow-500', 'text-red-500');
+            }
+        }
+
+        function stopTracking() {
+            pauseTracking();
+            showIOSAlert("Save Hike", "Do you want to save this route to your history?", [
+                { text: "Discard", style: "destructive", action: resetTracker },
+                { text: "Save Route", style: "default", action: saveHike }
+            ]);
+        }
+
+        function saveHike() {
+            let history = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY)) || [];
+            const currentDateStr = new Date().toLocaleDateString();
+            const defaultName = `Hike - ${currentDateStr} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+            
+            history.push({
+                id: Date.now(),
+                name: defaultName,
+                date: currentDateStr,
+                distance: distance.toFixed(2),
+                duration: duration,
+                points: positions,
+                weather: currentWeatherString,
+                comment: "",
+                photo: null,
+                weekId: null
+            });
+            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+            
+            showIOSAlert("Saved", "Your hike has been saved to history.", [{ text: "OK", style: "cancel" }]);
+            renderHistoryList();
+            updateProfileStats();
+            resetTracker();
+        }
+
+        function resetTracker() {
+            isTracking = false;
+            clearInterval(timerInterval);
+            duration = 0;
+            document.getElementById('timer-display').innerText = "00:00:00";
+            
+            document.getElementById('btn-pause').classList.add('hidden');
+            document.getElementById('btn-resume').classList.add('hidden');
+            document.getElementById('btn-stop').classList.add('hidden');
+            document.getElementById('btn-start').classList.remove('hidden');
+            document.getElementById('recording-indicator').classList.add('hidden');
+        }
+
+        function updateTimer() {
+            duration = Math.floor((Date.now() - startTime) / 1000);
+            const h = Math.floor(duration / 3600).toString().padStart(2, '0');
+            const m = Math.floor((duration % 3600) / 60).toString().padStart(2, '0');
+            const s = (duration % 60).toString().padStart(2, '0');
+            document.getElementById('timer-display').innerText = `${h}:${m}:${s}`;
+
+            if (distance > 0) {
+                const paceMinutes = (duration / 60) / distance;
+                const pM = Math.floor(paceMinutes);
+                const pS = Math.floor((paceMinutes - pM) * 60).toString().padStart(2, '0');
+                document.getElementById('pace-display').innerText = `${pM}'${pS}"`;
+            }
+        }
+
+        function renderScheduleList() {
+            const container = document.getElementById('schedule-list');
+            if (!container) return;
+            container.innerHTML = '';
+            
+            hk100Data.forEach(item => {
+                const isDone = completedChallenges[item.id] === true;
+                const compDate = completionDates[item.id] || '';
+                
+                const card = document.createElement('div');
+                card.className = `glass-card p-4 mx-4 rounded-[20px] flex flex-col justify-between border ${isDone ? 'border-green-500/50 bg-[#34C759]/10' : 'border-white/5 bg-white/5'}`;
+                
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-[10px] font-bold px-2 py-1 rounded bg-black/40 text-gray-300 ${isDone ? 'bg-[#34C759]/30 text-green-300' : ''}">${item.week}</span>
+                            <span class="text-xs font-semibold text-white/90">${item.district}</span>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="text-[10px] font-bold text-gray-400 bg-black/30 px-2 py-1 rounded-full border border-white/5">
+                                <i class="fa-solid fa-flag text-gray-500 mr-1 text-[8px]"></i>${item.peakCount} Peaks
+                            </span>
+                            <div class="w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors ${isDone ? 'border-[#34C759] bg-[#34C759]' : 'border-gray-500'}">
+                                ${isDone ? '<i class="fa-solid fa-check text-white text-[10px]"></i>' : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <h3 class="font-bold text-white text-[15px] leading-tight mb-2 ${isDone ? 'line-through text-gray-400' : ''}">${item.peaks}</h3>
+                    
+                    ${isDone && compDate ? `<div class="mb-2 text-[11px] text-[#34C759] font-medium"><i class="fa-solid fa-calendar-check mr-1"></i> Completed on ${compDate}</div>` : ''}
+
+                    <div class="grid grid-cols-2 gap-2 text-[11px] text-gray-400 bg-black/20 p-2 rounded-xl">
+                        <div class="flex items-start">
+                            <i class="fa-solid fa-mountain text-gray-500 mr-1.5 mt-0.5 w-3"></i> 
+                            <span class="leading-tight">${item.diff}</span>
+                        </div>
+                        <div class="flex items-start">
+                            <i class="fa-solid fa-clock text-gray-500 mr-1.5 mt-0.5 w-3"></i> 
+                            <span>${item.time}</span>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function updateProgressRing() {
+            let completedPeaks = 0;
+            hk100Data.forEach(item => {
+                if (completedChallenges[item.id]) {
+                    completedPeaks += item.peakCount;
+                }
+            });
+            
+            const percentage = Math.round((completedPeaks / TOTAL_PEAKS) * 100);
+            
+            document.getElementById('scheduleProgressText').innerText = `${completedPeaks}/${TOTAL_PEAKS} Peaks`;
+            document.getElementById('progressRingPercent').innerText = `${percentage}%`;
+            
+            const mapRemainingEl = document.getElementById('map-peaks-remaining');
+            if (mapRemainingEl) {
+                const remaining = TOTAL_PEAKS - completedPeaks;
+                if (remaining <= 0) {
+                    mapRemainingEl.innerText = "Challenge Completed!";
+                } else {
+                    mapRemainingEl.innerText = `${remaining} Peaks Remaining`;
+                }
+            }
+            
+            const circle = document.getElementById('progressRingSvg');
+            if (circle) {
+                const circumference = 163.36;
+                const offset = circumference - (percentage / 100) * circumference;
+                circle.style.strokeDashoffset = offset;
+            }
+        }
+
+        function renderHistoryList() {
+            const container = document.getElementById('history-list');
+            if (!container) return;
+            container.innerHTML = '';
+            
+            let history = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY)) || [];
+            if (history.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center mt-10">No hikes recorded yet.</p>';
+                return;
+            }
+            
+            history.forEach((hike) => {
+                const m = Math.floor(hike.duration / 60);
+                const s = hike.duration % 60;
+                
+                const commentHtml = hike.comment ? `<p class="text-sm text-gray-300 mt-2 border-l-2 border-[#0A84FF] pl-3 italic">"${hike.comment}"</p>` : '';
+                const photoHtml = hike.photo ? `<img src="${hike.photo}" class="w-full h-40 object-cover rounded-xl mt-3 border border-white/5 shadow-md">` : '';
+                const weatherHtml = hike.weather && hike.weather !== "--" ? `<span class="text-[10px] text-gray-400 bg-white/10 px-2 py-0.5 rounded-md"><i class="fa-solid fa-cloud-sun"></i> ${hike.weather}</span>` : '';
+                
+                let peakInfoHtml = '';
+                if (hike.weekId) {
+                    const matchedWeek = hk100Data.find(w => w.id == hike.weekId);
+                    if (matchedWeek) {
+                        peakInfoHtml = `
+                            <div class="mt-2 bg-[#0A84FF]/10 border border-[#0A84FF]/30 p-2.5 rounded-xl">
+                                <span class="text-[10px] font-bold text-[#0A84FF] uppercase tracking-wider block">${matchedWeek.week} • Completed Peaks</span>
+                                <p class="text-sm font-bold text-white mt-0.5">${matchedWeek.peaks}</p>
+                            </div>
+                        `;
+                    }
+                }
+
+                const card = document.createElement('div');
+                card.className = "glass-card p-5 rounded-3xl relative";
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <h3 class="font-bold text-lg text-white mb-1">${hike.name || "Hike Route"}</h3>
+                            <div class="flex items-center space-x-2">
+                                <p class="text-[11px] text-gray-400 uppercase tracking-wider">${hike.date}</p>
+                                ${weatherHtml}
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold text-2xl text-white">${hike.distance} <span class="text-xs font-normal text-gray-400">km</span></p>
+                            <p class="font-semibold text-[#0A84FF] text-sm mt-0.5">${m}m ${s}s</p>
+                        </div>
+                    </div>
+                    ${peakInfoHtml}
+                    ${commentHtml}
+                    ${photoHtml}
+                    <div class="flex justify-end space-x-2 mt-4 pt-3 border-t border-white/5">
+                        <button onclick="viewHikeOnMap(${hike.id})" class="bg-[#0A84FF]/20 text-[#0A84FF] text-[12px] px-3.5 py-1.5 rounded-full hover:bg-[#0A84FF]/30 active:scale-95 transition-all flex items-center space-x-1">
+                            <i class="fa-solid fa-map-location-dot text-[10px]"></i> <span>View</span>
+                        </button>
+                        <button onclick="openEditModal(${hike.id})" class="bg-white/10 text-white text-[12px] px-3.5 py-1.5 rounded-full hover:bg-white/20 active:scale-95 transition-all flex items-center space-x-1">
+                            <i class="fa-solid fa-pen text-[10px]"></i> <span>Edit</span>
+                        </button>
+                        <button onclick="deleteHike(${hike.id})" class="bg-red-500/20 text-red-400 text-[12px] px-3.5 py-1.5 rounded-full hover:bg-red-500/30 active:scale-95 transition-all flex items-center space-x-1">
+                            <i class="fa-solid fa-trash text-[10px]"></i> <span>Delete</span>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function viewHikeOnMap(id) {
+            let history = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY)) || [];
+            let hike = history.find(h => h.id === id);
+            if (!hike) return;
+            
+            switchTab('map');
+            
+            if (hike.points && hike.points.length > 0) {
+                historyRouteLayer.setLatLngs(hike.points);
+                map.fitBounds(historyRouteLayer.getBounds(), { padding: [50, 50] });
+            } else if (hike.weekId) {
+                const weekItem = hk100Data.find(w => w.id == hike.weekId);
+                if (weekItem) {
+                    map.setView([weekItem.lat, weekItem.lng], 14);
+                }
+            }
+        }
+
+        function deleteHike(id) {
+            showIOSAlert("Delete Hike", "Are you sure you want to delete this route from your history?", [
+                { text: "Cancel", style: "cancel" },
+                { 
+                    text: "Delete", 
+                    style: "destructive", 
+                    action: () => {
+                        let history = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY)) || [];
+                        const targetHike = history.find(h => h.id === id);
+                        
+                        if (targetHike && targetHike.weekId) {
+                            delete completedChallenges[targetHike.weekId];
+                            delete completionDates[targetHike.weekId];
+                            localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(completedChallenges));
+                            localStorage.setItem(COMPLETION_DATES_KEY, JSON.stringify(completionDates));
+                        }
+
+                        history = history.filter(h => h.id !== id);
+                        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+                        renderHistoryList();
+                        renderScheduleList();
+                        updateProgressRing();
+                        updateProfileStats();
+                        updateMapPins();
+                    } 
+                }
+            ]);
+        }
+
+        let currentEditId = null;
+        let currentEditPhoto = null;
+
+        function openEditModal(id) {
+            currentEditId = id;
+            let history = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY)) || [];
+            let hike = history.find(h => h.id === id);
+            
+            document.getElementById('edit-route-name').value = hike.name || '';
+            document.getElementById('edit-comment').value = hike.comment || '';
+            currentEditPhoto = hike.photo || null;
+            
+            const selectEl = document.getElementById('edit-week-select');
+            selectEl.innerHTML = '<option value="">-- None (Free Hike) --</option>';
+            hk100Data.forEach(w => {
+                const opt = document.createElement('option');
+                opt.value = w.id;
+                opt.textContent = `${w.week}: ${w.peaks} (${w.peakCount} peaks)`;
+                if (hike.weekId && hike.weekId == w.id) {
+                    opt.selected = true;
+                }
+                selectEl.appendChild(opt);
+            });
+            
+            const preview = document.getElementById('edit-photo-preview');
+            const container = document.getElementById('edit-photo-container');
+            
+            if (currentEditPhoto) {
+                preview.src = currentEditPhoto;
+                container.classList.remove('hidden');
+            } else {
+                preview.src = '';
+                container.classList.add('hidden');
+            }
+            
+            const modal = document.getElementById('edit-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeEditModal() {
+            const modal = document.getElementById('edit-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.getElementById('edit-photo-input').value = "";
+        }
+
+        function removePhoto() {
+            currentEditPhoto = null;
+            document.getElementById('edit-photo-container').classList.add('hidden');
+            document.getElementById('edit-photo-preview').src = '';
+        }
+
+        function saveEdit() {
+            let history = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY)) || [];
+            let index = history.findIndex(h => h.id === currentEditId);
+            if (index !== -1) {
+                const selectedWeekId = document.getElementById('edit-week-select').value;
+                const oldWeekId = history[index].weekId;
+                
+                if (oldWeekId && oldWeekId != selectedWeekId) {
+                    delete completedChallenges[oldWeekId];
+                    delete completionDates[oldWeekId];
+                }
+
+                history[index].name = document.getElementById('edit-route-name').value.trim() || "Hike Route";
+                history[index].comment = document.getElementById('edit-comment').value.trim();
+                history[index].photo = currentEditPhoto;
+                history[index].weekId = selectedWeekId ? parseInt(selectedWeekId) : null;
+                
+                if (selectedWeekId) {
+                    const wId = parseInt(selectedWeekId);
+                    completedChallenges[wId] = true;
+                    completionDates[wId] = history[index].date;
+                }
+
+                localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(completedChallenges));
+                localStorage.setItem(COMPLETION_DATES_KEY, JSON.stringify(completionDates));
+                localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+                
+                renderHistoryList();
+                renderScheduleList();
+                updateProgressRing();
+                updateProfileStats();
+                updateMapPins();
+            }
+            closeEditModal();
+        }
+
+        function handlePhotoUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 800;
+                    let scaleSize = MAX_WIDTH / img.width;
+                    if (scaleSize > 1) scaleSize = 1; 
+                    
+                    canvas.width = img.width * scaleSize;
+                    canvas.height = img.height * scaleSize;
+                    
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.6); 
+                    currentEditPhoto = dataUrl;
+                    
+                    const preview = document.getElementById('edit-photo-preview');
+                    preview.src = dataUrl;
+                    document.getElementById('edit-photo-container').classList.remove('hidden');
+                }
+                img.src = e.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+
+        function updateProfileStats() {
+            let history = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY)) || [];
+            
+            let totalDist = 0;
+            let totalDur = 0;
+            
+            history.forEach(h => {
+                totalDist += parseFloat(h.distance);
+                totalDur += parseInt(h.duration);
+            });
+            
+            document.getElementById('total-distance').innerText = totalDist.toFixed(1);
+            document.getElementById('total-time').innerText = Math.floor(totalDur / 3600) + 'h';
+            
+            let completedPeaks = 0;
+            hk100Data.forEach(item => {
+                if (completedChallenges[item.id]) {
+                    completedPeaks += item.peakCount;
+                }
+            });
+
+            document.getElementById('hk100BadgeCount').innerText = `${completedPeaks} / 100`;
+            const badgeIcon = document.getElementById('hk100BadgeIcon');
+            
+            if (completedPeaks >= 100) {
+                badgeIcon.classList.replace('bg-gray-800', 'bg-[#34C759]');
+                badgeIcon.classList.replace('border-gray-600', 'border-green-400');
+                badgeIcon.querySelector('i').classList.replace('text-gray-500', 'text-white');
+            }
+        }
+
+        function switchTab(tabId) {
+            activeTab = tabId;
+            
+            document.querySelectorAll('.view-layer').forEach(v => {
+                v.classList.remove('active');
+            });
+            
+            const zoomControls = document.getElementById('map-zoom-controls');
+            if (tabId === 'map') {
+                document.getElementById('view-map').classList.add('active');
+                zoomControls.style.display = 'flex';
+            } else {
+                zoomControls.style.display = 'none';
+                document.getElementById('view-' + tabId).classList.add('active');
+            }
+            
+            document.querySelectorAll('.tab-icon').forEach(i => i.classList.remove('tab-active'));
+            document.querySelectorAll('.tab-bar span').forEach(s => s.classList.remove('tab-active'));
+            
+            document.getElementById('tab-icon-' + tabId).classList.add('tab-active');
+            document.getElementById('tab-text-' + tabId).classList.add('tab-active');
+            
+            if (tabId === 'map' && map) {
+                setTimeout(() => { map.invalidateSize(); }, 50); 
+            }
+        }
+
+        window.onload = function() {
+            initMap();
+            switchTab('map'); 
+            renderScheduleList();
+            renderHistoryList();
+            updateProgressRing();
+            updateProfileStats();
+            
+            fetchWeather(HK_CENTER[0], HK_CENTER[1]);
+            
+            if (navigator.geolocation) {
+                geoWatchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
+                    enableHighAccuracy: true,
+                    maximumAge: 0
+                });
+            }
+        };
+    </script>
+</body>
+</html>
