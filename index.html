@@ -709,7 +709,18 @@
             document.getElementById('btn-start').classList.add('hidden');
             document.getElementById('btn-pause').classList.remove('hidden');
             document.getElementById('btn-stop').classList.remove('hidden');
-            document.getElementById('recording-indicator').classList.remove('hidden');
+            
+            const indicator = document.getElementById('recording-indicator');
+            indicator.classList.remove('hidden');
+            const dot = indicator.querySelector('div');
+            const span = indicator.querySelector('span');
+            if (dot) {
+                dot.className = "w-3 h-3 rounded-full bg-red-500 animate-pulse";
+            }
+            if (span) {
+                span.className = "text-xs font-semibold text-red-500 uppercase tracking-wider";
+                span.innerText = "REC";
+            }
 
             startTime = Date.now();
             timerInterval = setInterval(updateTimer, 1000);
