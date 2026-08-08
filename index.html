@@ -239,7 +239,28 @@
         <div class="px-6 pt-10 pb-4 sticky top-0 glass-panel z-20 border-b border-white/10">
             <h1 class="text-3xl font-bold tracking-tight">Profile</h1>
         </div>
-        <div class="p-6 space-y-6">
+        <div class="p-6 space-y-6 pb-28">
+            <!-- Google Login Card -->
+            <div class="glass-card rounded-3xl p-6">
+                <h2 class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-4">Account & Cloud Sync</h2>
+                <div id="account-status-container" class="flex flex-col space-y-4">
+                    <div class="flex items-center space-x-3">
+                        <div id="user-avatar-icon" class="w-12 h-12 rounded-full bg-[#0A84FF]/20 border border-[#0A84FF]/40 flex items-center justify-center text-[#0A84FF] text-xl font-bold">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+                        <div>
+                            <p id="account-name" class="font-bold text-white text-base">Guest Account</p>
+                            <p id="account-email" class="text-xs text-gray-400">Data is synced to current session</p>
+                        </div>
+                    </div>
+                    <div id="account-action-area" class="pt-2">
+                        <button onclick="loginWithGoogle()" class="w-full py-3.5 bg-white text-black font-bold rounded-2xl flex items-center justify-center space-x-2 active:scale-[0.98] transition-all shadow-lg">
+                            <i class="fa-brands fa-google text-red-500"></i> <span>Sign in with Google</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div class="glass-card rounded-3xl p-6">
                 <h2 class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-4">Lifetime Stats</h2>
                 <div class="grid grid-cols-2 gap-4">
@@ -357,7 +378,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -376,29 +397,145 @@
         window.getDocs = getDocs;
         window.addDoc = addDoc;
 
+        // Local storage persistence fallback for offline or permission-restricted environments
+        function loadLocalData() {
+            try {
+                const localProg = localStorage.getItem('hk100_progress_' + appId);
+                if (localProg && localProg !== 'undefined' && localProg !== 'null') {
+                    const parsed = JSON.parse(localProg);
+                    window.completedChallenges = parsed.completedChallenges || {};
+                    window.completionDates = parsed.completionDates || {};
+                } else {
+                    localStorage.removeItem('hk100_progress_' + appId);
+                }
+                const localHist = localStorage.getItem('hk100_history_' + appId);
+                if (localHist && localHist !== 'undefined' && localHist !== 'null') {
+                    window.hikeHistory = JSON.parse(localHist);
+                } else {
+                    localStorage.removeItem('hk100_history_' + appId);
+                }
+            } catch (err) {
+                console.error("Local storage load error:", err);
+                try {
+                    localStorage.removeItem('hk100_progress_' + appId);
+                    localStorage.removeItem('hk100_history_' + appId);
+                } catch(e) {}
+            }
+        }
+
+        function saveLocalData() {
+            try {
+                localStorage.setItem('hk100_progress_' + appId, JSON.stringify({ 
+                    completedChallenges: window.completedChallenges, 
+                    completionDates: window.completionDates 
+                }));
+                localStorage.setItem('hk100_history_' + appId, JSON.stringify(window.hikeHistory));
+            } catch (err) {
+                console.error("Local storage save error:", err);
+            }
+        }
+        window.loadLocalData = loadLocalData;
+        window.saveLocalData = saveLocalData;
+
         async function initFirebase() {
             try {
                 const app = initializeApp(firebaseConfig);
                 window.db = getFirestore(app);
                 window.auth = getAuth(app);
 
-                if (initialAuthToken) {
-                    await signInWithCustomToken(window.auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(window.auth);
-                }
+                onAuthStateChanged(window.auth, async (user) => {
+                    if (user) {
+                        window.userId = user.uid;
+                        console.log("User Authenticated:", window.userId, user.isAnonymous ? "(Anonymous)" : "(Google)");
+                        updateProfileUI();
+                        if (typeof window.loadCloudData === 'function') {
+                            window.loadCloudData();
+                        }
+                    } else {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(window.auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(window.auth);
+                        }
+                    }
+                });
 
-                window.userId = window.auth.currentUser?.uid || crypto.randomUUID();
-                console.log("Cloud Database Connected. User ID:", window.userId);
-
-                if (typeof window.loadCloudData === 'function') {
-                    window.loadCloudData();
-                }
             } catch (err) {
-                console.error("Firebase connection error:", err);
+                console.warn("Firebase connection warning, falling back to local storage:", err);
+                loadLocalData();
+                renderScheduleList();
+                renderHistoryList();
+                updateProgressRing();
+                updateProfileStats();
+                updateMapPins();
             }
         }
         initFirebase();
+
+        window.loginWithGoogle = async function() {
+            try {
+                const provider = new GoogleAuthProvider();
+                await signInWithPopup(window.auth, provider);
+                showIOSAlert("Success", "Successfully signed in with Google!", [{ text: "OK", style: "cancel" }]);
+            } catch (error) {
+                if (error.code === 'auth/unauthorized-domain') {
+                    console.warn("Google Sign-In notice (expected in preview/sandbox environments):", error.message);
+                    showIOSAlert(
+                        "Preview Domain Notice", 
+                        "Google Sign-In requires your deployment domain to be added to your Firebase Console under Authentication > Settings > Authorized domains. Your app is fully functional in Guest mode with local sync!", 
+                        [{ text: "OK", style: "cancel" }]
+                    );
+                } else {
+                    console.error("Google sign-in error:", error);
+                    showIOSAlert("Sign In Failed", error.message || "Could not sign in with Google.", [{ text: "OK", style: "cancel" }]);
+                }
+            }
+        };
+
+        window.logoutUser = async function() {
+            try {
+                await signOut(window.auth);
+                await signInAnonymously(window.auth);
+                showIOSAlert("Signed Out", "You have been signed out to guest mode.", [{ text: "OK", style: "cancel" }]);
+            } catch (error) {
+                console.error("Sign out error:", error);
+            }
+        };
+
+        function updateProfileUI() {
+            const user = window.auth?.currentUser;
+            const nameEl = document.getElementById('account-name');
+            const emailEl = document.getElementById('account-email');
+            const actionArea = document.getElementById('account-action-area');
+            const avatarIcon = document.getElementById('user-avatar-icon');
+
+            if (!user || user.isAnonymous) {
+                if (nameEl) nameEl.innerText = "Guest Account (Anonymous)";
+                if (emailEl) emailEl.innerText = "Sign in with Google to sync across devices.";
+                if (avatarIcon) avatarIcon.innerHTML = '<i class="fa-solid fa-user"></i>';
+                if (actionArea) {
+                    actionArea.innerHTML = `
+                        <button onclick="loginWithGoogle()" class="w-full py-3.5 bg-white text-black font-bold rounded-2xl flex items-center justify-center space-x-2 active:scale-[0.98] transition-all shadow-lg">
+                            <i class="fa-brands fa-google text-red-500"></i> <span>Sign in with Google</span>
+                        </button>
+                    `;
+                }
+            } else {
+                if (nameEl) nameEl.innerText = user.displayName || "Google User";
+                if (emailEl) emailEl.innerText = user.email || "Synced with Google Account";
+                if (user.photoURL && avatarIcon) {
+                    avatarIcon.innerHTML = `<img src="${user.photoURL}" class="w-12 h-12 rounded-full object-cover">`;
+                }
+                if (actionArea) {
+                    actionArea.innerHTML = `
+                        <button onclick="logoutUser()" class="w-full py-3.5 bg-red-500/20 text-red-400 font-bold rounded-2xl flex items-center justify-center space-x-2 active:scale-[0.98] transition-all border border-red-500/30">
+                            <i class="fa-solid fa-right-from-bracket"></i> <span>Sign Out</span>
+                        </button>
+                    `;
+                }
+            }
+        }
+        window.updateProfileUI = updateProfileUI;
     </script>
 
     <script>
@@ -460,9 +597,22 @@
         let completionDates = {};
         let hikeHistory = [];
 
-        // Cloud Data Synchronization Functions
+        // Cloud Data Synchronization Functions with robust LocalStorage Fallback
         window.loadCloudData = async function() {
-            if (!window.db || !window.userId) return;
+            // First load local data instantly
+            if (typeof window.loadLocalData === 'function') {
+                window.loadLocalData();
+            }
+
+            if (!window.db || !window.userId) {
+                renderScheduleList();
+                renderHistoryList();
+                updateProgressRing();
+                updateProfileStats();
+                updateMapPins();
+                return;
+            }
+
             try {
                 const progRef = window.doc(window.db, 'artifacts', window.appId, 'users', window.userId, 'settings', 'progress');
                 const progSnap = await window.getDoc(progRef);
@@ -474,60 +624,83 @@
 
                 const histCol = window.collection(window.db, 'artifacts', window.appId, 'users', window.userId, 'history');
                 const histSnap = await window.getDocs(histCol);
-                hikeHistory = [];
-                histSnap.forEach(d => {
-                    hikeHistory.push({ id: d.id, ...d.data() });
-                });
-                hikeHistory.sort((a, b) => b.id - a.id);
-
-                renderScheduleList();
-                renderHistoryList();
-                updateProgressRing();
-                updateProfileStats();
-                updateMapPins();
+                if (!histSnap.empty) {
+                    hikeHistory = [];
+                    histSnap.forEach(d => {
+                        hikeHistory.push({ id: d.id, ...d.data() });
+                    });
+                    hikeHistory.sort((a, b) => b.id - a.id);
+                }
             } catch (e) {
-                console.error("Error loading cloud data:", e);
+                console.warn("Cloud load warning (using local fallback due to permissions/network):", e.message);
+                if (typeof window.loadLocalData === 'function') {
+                    window.loadLocalData();
+                }
             }
+
+            if (typeof window.saveLocalData === 'function') {
+                window.saveLocalData();
+            }
+            renderScheduleList();
+            renderHistoryList();
+            updateProgressRing();
+            updateProfileStats();
+            updateMapPins();
         };
 
         async function saveCloudProgress() {
+            if (typeof window.saveLocalData === 'function') {
+                window.saveLocalData();
+            }
             if (!window.db || !window.userId) return;
             try {
                 const progRef = window.doc(window.db, 'artifacts', window.appId, 'users', window.userId, 'settings', 'progress');
                 await window.setDoc(progRef, { completedChallenges, completionDates }, { merge: true });
             } catch (e) {
-                console.error("Error saving progress:", e);
+                console.warn("Cloud progress save warning:", e.message);
             }
         }
 
         async function saveHikeToCloud(hikeData) {
-            if (!window.db || !window.userId) return;
+            if (typeof window.saveLocalData === 'function') {
+                window.saveLocalData();
+            }
+            if (!window.db || !window.userId) {
+                return 'local_' + Date.now();
+            }
             try {
                 const histCol = window.collection(window.db, 'artifacts', window.appId, 'users', window.userId, 'history');
                 const docRef = await window.addDoc(histCol, hikeData);
                 return docRef.id;
             } catch (e) {
-                console.error("Error saving hike to cloud:", e);
+                console.warn("Cloud hike save warning:", e.message);
+                return 'local_' + Date.now();
             }
         }
 
         async function updateHikeInCloud(docId, hikeData) {
-            if (!window.db || !window.userId) return;
+            if (typeof window.saveLocalData === 'function') {
+                window.saveLocalData();
+            }
+            if (!window.db || !window.userId || String(docId).startsWith('local_')) return;
             try {
                 const hikeRef = window.doc(window.db, 'artifacts', window.appId, 'users', window.userId, 'history', String(docId));
                 await window.setDoc(hikeRef, hikeData, { merge: true });
             } catch (e) {
-                console.error("Error updating hike in cloud:", e);
+                console.warn("Cloud hike update warning:", e.message);
             }
         }
 
         async function deleteHikeFromCloud(docId) {
-            if (!window.db || !window.userId) return;
+            if (typeof window.saveLocalData === 'function') {
+                window.saveLocalData();
+            }
+            if (!window.db || !window.userId || String(docId).startsWith('local_')) return;
             try {
                 const hikeRef = window.doc(window.db, 'artifacts', window.appId, 'users', window.userId, 'history', String(docId));
                 await window.deleteDoc(hikeRef);
             } catch (e) {
-                console.error("Error deleting hike from cloud:", e);
+                console.warn("Cloud hike delete warning:", e.message);
             }
         }
 
@@ -733,7 +906,7 @@
             document.getElementById('btn-resume').classList.remove('hidden');
             const indicator = document.getElementById('recording-indicator');
             if(indicator) {
-                indicator.querySelector('.bg-red-500')?.classList.replace('bg-red-500', 'bg-yellow-500');
+                indicator.querySelector('div')?.classList.replace('bg-red-500', 'bg-yellow-500');
                 indicator.querySelector('span').innerText = 'PAUSED';
                 indicator.querySelector('span')?.classList.replace('text-red-500', 'text-yellow-500');
             }
