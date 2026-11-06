@@ -1,20 +1,14 @@
 /**
- * Firebase web config for GitHub Pages.
- *
- * Leave `enabled` false until the site owner pastes a real web app config.
- * An empty config keeps guest mode: hikes stay in this browser only.
- * Setup steps, authorized domains, and redirect URIs: docs/CLOUD_SIGNIN.md
- *
- * The Firebase web apiKey is not a server secret, but it still must come from
- * the owner's Firebase project. Do not invent or commit a placeholder that
- * looks like a live key.
+ * Firebase web config for the hk100done-tracker project.
+ * The apiKey is a browser key. Auth domains and firestore.rules limit its use.
+ * Domain and sign-in troubleshooting: docs/CLOUD_SIGNIN.md
  */
 export const firebaseConfig = {
-    enabled: false,
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: "",
+    enabled: true,
+    apiKey: "AIzaSyC3xOaYx6iAZF3QwfUwNwShiurkViNWXRw",
+    authDomain: "hk100done-tracker.firebaseapp.com",
+    projectId: "hk100done-tracker",
+    storageBucket: "hk100done-tracker.firebasestorage.app",
+    messagingSenderId: "978956027053",
+    appId: "1:978956027053:web:e025b6e27904dc9b2b3224",
 };

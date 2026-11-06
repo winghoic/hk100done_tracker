@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createTrackerSync } from "../js/cloud-sync.js";
+import { firebaseConfig } from "../js/firebase-config.js";
 import {
     applyUiEdits,
     cloudDocumentPlan,
@@ -325,16 +326,25 @@ test("deleting a synced hike removes that cloud document only", async () => {
     assert.deepEqual(last.deleteHikePaths, [["users", "ada", "hikes", "hike_drop"]]);
 });
 
-test("repo contract: no invented Firebase project, rules bind Google users, Pages setup is documented", () => {
-    const config = readFileSync(new URL("../js/firebase-config.js", import.meta.url), "utf8");
+test("committed web config is the hk100done-tracker Firebase app", () => {
+    assert.equal(isFirebaseConfigReady(firebaseConfig), true);
+    assert.deepEqual(firebaseConfig, {
+        enabled: true,
+        apiKey: "AIzaSyC3xOaYx6iAZF3QwfUwNwShiurkViNWXRw",
+        authDomain: "hk100done-tracker.firebaseapp.com",
+        projectId: "hk100done-tracker",
+        storageBucket: "hk100done-tracker.firebasestorage.app",
+        messagingSenderId: "978956027053",
+        appId: "1:978956027053:web:e025b6e27904dc9b2b3224",
+    });
+});
+
+test("repo contract: rules bind Google users and Pages setup matches this project", () => {
     const page = readFileSync(new URL("../index.html", import.meta.url), "utf8");
     const rules = readFileSync(new URL("../firestore.rules", import.meta.url), "utf8");
     const docs = readFileSync(new URL("../docs/CLOUD_SIGNIN.md", import.meta.url), "utf8");
     const boot = readFileSync(new URL("../js/boot.js", import.meta.url), "utf8");
 
-    assert.match(config, /enabled:\s*false/);
-    assert.match(config, /apiKey:\s*""/);
-    assert.doesNotMatch(config, /AIza/);
     assert.doesNotMatch(page, /__firebase_config|signInAnonymously|onclick="loginWithGoogle\(\)"/);
     assert.match(page, /src="\.\/js\/boot\.js"/);
     assert.match(page, /hk100_guest_v1/);
@@ -344,9 +354,11 @@ test("repo contract: no invented Firebase project, rules bind Google users, Page
     assert.doesNotMatch(rules, /allow read, write: if true/);
     assert.match(docs, /winghoic\.github\.io/);
     assert.match(docs, /https:\/\/winghoic\.github\.io\/hk100done_tracker\//);
-    assert.match(docs, /\/__\/auth\/handler/);
+    assert.match(docs, /https:\/\/hk100done-tracker\.firebaseapp\.com\/__\/auth\/handler/);
+    assert.match(docs, /https:\/\/hk100done-tracker\.web\.app\/__\/auth\/handler/);
     assert.match(docs, /Authorized domains/);
     assert.match(docs, /firebase deploy --only firestore:rules/);
+    assert.doesNotMatch(docs, /YOUR_|paste the web app config|credentials are still missing|enabled: false/i);
     const plan = planAccountLoad({
         guest: { hikes: [] },
         cache: { hikes: [] },

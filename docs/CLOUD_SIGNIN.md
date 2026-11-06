@@ -1,75 +1,57 @@
 # Google sign-in and cloud sync
 
-The tracker runs as a static site on GitHub Pages. Until the steps below are done, **Sign in with Google** stays in guest mode and hikes remain in this browser only. Do not invent a Firebase config. Paste the web app config from the Firebase project you create.
+The tracker is a static site on GitHub Pages. The web app config for Firebase project `hk100done-tracker` is in `js/firebase-config.js` with `enabled: true`.
 
 Live site: `https://winghoic.github.io/hk100done_tracker/`
 
-The Firebase web `apiKey` is restricted by the domains and rules below. It is not a server secret, but it still has to come from your project. Do not commit service-account JSON or OAuth client secrets.
+The Firebase web `apiKey` is in the page on purpose. It is not a server secret. Who can sign in, and which documents they can read, is limited by the authorized domains below, the Google OAuth client, and `firestore.rules`. Do not commit a service-account JSON file or an OAuth client secret.
 
-## 1. Firebase project
+`authDomain` is `hk100done-tracker.firebaseapp.com`.
 
-1. Create a project in the [Firebase console](https://console.firebase.google.com/).
-2. Authentication → Sign-in method → enable **Google**. Leave Anonymous disabled. This app ignores any session that is not Google.
-3. Create a **Cloud Firestore** database.
-4. Project settings → Your apps → add a **Web** app.
-5. Copy the config into `js/firebase-config.js`, set `enabled` to `true`, and commit that file. `authDomain` must stay `{projectId}.firebaseapp.com`.
+## Authorized domains and OAuth URIs
 
-```js
-export const firebaseConfig = {
-  enabled: true,
-  apiKey: "...",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.firebasestorage.app",
-  messagingSenderId: "...",
-  appId: "..."
-};
-```
+GitHub Pages serves this repo from a project site. The origin does not include the `/hk100done_tracker` path.
 
-## 2. Authorized domains and OAuth URIs
-
-GitHub Pages serves this repo from a project site. The origin does **not** include the `/hk100done_tracker` path.
-
-Firebase → Authentication → Settings → **Authorized domains**. Add the host only:
+Firebase → Authentication → Settings → Authorized domains. The host only:
 
 - `winghoic.github.io`
 - `localhost` (Firebase usually adds this itself)
 
 Google Cloud → APIs & Services → Credentials → the OAuth 2.0 client Firebase created (often “Web client (auto created by Google Service)”).
 
-Authorized **JavaScript origins**:
+Authorized JavaScript origins:
 
 - `https://winghoic.github.io`
 - `http://localhost`
 
-Authorized **redirect URIs** (Firebase’s handler, used if the browser blocks the Google popup):
+Authorized redirect URIs, used if the browser blocks the Google popup:
 
-- `https://YOUR_PROJECT_ID.firebaseapp.com/__/auth/handler`
-- `https://YOUR_PROJECT_ID.web.app/__/auth/handler`
+- `https://hk100done-tracker.firebaseapp.com/__/auth/handler`
+- `https://hk100done-tracker.web.app/__/auth/handler`
 
-Do not add `https://winghoic.github.io/hk100done_tracker` as a JavaScript origin. Origins cannot contain a path. Do not add `https://winghoic.github.io/__/auth/handler`; GitHub Pages does not host Firebase’s auth handler.
+Do not add `https://winghoic.github.io/hk100done_tracker` as a JavaScript origin. Origins cannot contain a path. Do not add `https://winghoic.github.io/__/auth/handler`. GitHub Pages does not host Firebase’s auth handler.
 
-OAuth consent screen: while the app is in **Testing**, only listed test users can finish Google sign-in. Add the Google accounts that will use the tracker, or publish the consent screen when you are ready.
+OAuth consent screen: while the app is in Testing, only listed test users can finish Google sign-in. Add the Google accounts that will use the tracker, or publish the consent screen when you are ready.
 
-## 3. Deploy security rules
+## Firestore rules
 
 `firestore.rules` allows a signed-in Google user to read and write only `users/{their uid}` and its `tracker`, `hikes`, and `backups` documents. Every other path is denied.
 
-From this repository, after `firebase login` and `firebase use --add`:
+Cloud saves work after those rules are published to project `hk100done-tracker`:
 
 ```bash
 firebase deploy --only firestore:rules
 ```
 
-Sign-in can succeed before this deploy, but cloud saves will be denied until the rules are published. The profile line then says the save stayed on this device.
+Sign-in can succeed before that publish. If a save is denied, the profile line says the hike stayed on this device.
 
-## 4. GitHub Pages
+## GitHub Pages
 
-Publish the branch that contains `index.html`, `js/`, and `firestore.rules` is not required on Pages, but `js/firebase-config.js` is. The site URL is:
+Publish the branch that contains `index.html` and `js/`. The site URL is:
 
 `https://winghoic.github.io/hk100done_tracker/`
 
-`.nojekyll` is included so Pages serves the `js/` files as-is. After the config change is merged, reload the Pages site and sign in from that exact origin.
+`.nojekyll` is included so Pages serves the `js/` files as-is. Sign in from that origin after the authorized domains above include `winghoic.github.io`.
 
 ## What users get
 
@@ -79,4 +61,11 @@ Publish the branch that contains `index.html`, `js/`, and `firestore.rules` is n
 - **Sign out:** the Google session ends and the screen returns to the guest store. Cloud hikes are not deleted. The next guest session does not show the previous account’s hikes.
 - **Large photos or tracks:** a Firestore document must stay under 1 MB. Oversized photos or point lists stay on this device (`photoOmitted` / `pointsOmitted`) and the rest of the hike still syncs. Track points are stored in the cloud as `{lat, lng}` objects because Firestore cannot store an array of arrays.
 
-Popup sign-in is the normal path. If the browser blocks the popup, the app continues with a full-page redirect. Safari can still interrupt that redirect when Firebase’s auth domain and GitHub Pages are different sites; the profile line shows the failure and local hikes stay put.
+Popup sign-in is the normal path. If the browser blocks the popup, the app continues with a full-page redirect. Safari can still interrupt that redirect when `hk100done-tracker.firebaseapp.com` and GitHub Pages are different sites. The profile line shows the failure, and local hikes stay put.
+
+## If sign-in or sync fails
+
+- **This site is not an authorized domain:** add `winghoic.github.io` in Firebase Authentication settings, with no path.
+- **Popup blocked:** allow popups, or stay on the page while the redirect continues. The redirect must return through `https://hk100done-tracker.firebaseapp.com/__/auth/handler`.
+- **Google account chooser closes immediately, or only some accounts work:** the OAuth consent screen is likely still in Testing. Add that Google account as a test user.
+- **Saved on this device / cloud save was denied:** publish `firestore.rules`. A missing network leaves the same on-device copy and retries when the browser is back online.
