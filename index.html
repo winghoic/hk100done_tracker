@@ -242,16 +242,18 @@
                 <h2 class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-4">Account & Cloud Sync</h2>
                 <div id="account-status-container" class="flex flex-col space-y-4">
                     <div class="flex items-center space-x-3">
-                        <div id="user-avatar-icon" class="w-12 h-12 rounded-full bg-[#0A84FF]/20 border border-[#0A84FF]/40 flex items-center justify-center text-[#0A84FF] text-xl font-bold">
-                            <i class="fa-solid fa-user"></i>
+                        <div id="user-avatar-icon" class="w-12 h-12 rounded-full bg-[#0A84FF]/20 border border-[#0A84FF]/40 flex items-center justify-center text-[#0A84FF] text-xl font-bold overflow-hidden">
+                            <img id="user-avatar-image" alt="" class="hidden w-full h-full object-cover">
+                            <i id="user-avatar-fallback" class="fa-solid fa-user"></i>
                         </div>
-                        <div>
-                            <p id="account-name" class="font-bold text-white text-base">Guest Account</p>
-                            <p id="account-email" class="text-xs text-gray-400">Data is synced to current session</p>
+                        <div class="min-w-0">
+                            <p id="account-name" class="font-bold text-white text-base">Guest</p>
+                            <p id="account-email" class="text-xs text-gray-400 truncate">Saved on this device</p>
+                            <p id="account-sync" class="text-xs text-gray-500 mt-1 leading-snug" aria-live="polite">Saved on this device until you sign in.</p>
                         </div>
                     </div>
                     <div id="account-action-area" class="pt-2">
-                        <button onclick="loginWithGoogle()" class="w-full py-3.5 bg-white text-black font-bold rounded-2xl flex items-center justify-center space-x-2 active:scale-[0.98] transition-all shadow-lg">
+                        <button id="btn-google-sign-in" type="button" class="w-full py-3.5 bg-white text-black font-bold rounded-2xl flex items-center justify-center space-x-2 active:scale-[0.98] transition-all shadow-lg">
                             <i class="fa-brands fa-google text-red-500"></i> <span>Sign in with Google</span>
                         </button>
                     </div>
@@ -371,98 +373,6 @@
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        window.appId = appId;
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        window.db = null;
-        window.auth = null;
-        window.userId = null;
-        window.doc = doc;
-        window.getDoc = getDoc;
-        window.setDoc = setDoc;
-        window.deleteDoc = deleteDoc;
-        window.collection = collection;
-        window.getDocs = getDocs;
-        window.addDoc = addDoc;
-
-        function loadLocalData() {
-            try {
-                const localProg = localStorage.getItem('hk100_progress_' + appId);
-                if (localProg && localProg !== 'undefined' && localProg !== 'null') {
-                    const parsed = JSON.parse(localProg);
-                    window.completedChallenges = parsed.completedChallenges || {};
-                    window.completionDates = parsed.completionDates || {};
-                }
-                const localHist = localStorage.getItem('hk100_history_' + appId);
-                if (localHist && localHist !== 'undefined' && localHist !== 'null') {
-                    window.hikeHistory = JSON.parse(localHist);
-                }
-            } catch (err) {}
-        }
-
-        function saveLocalData() {
-            try {
-                localStorage.setItem('hk100_progress_' + appId, JSON.stringify({ 
-                    completedChallenges: window.completedChallenges, 
-                    completionDates: window.completionDates 
-                }));
-                localStorage.setItem('hk100_history_' + appId, JSON.stringify(window.hikeHistory));
-            } catch (err) {}
-        }
-        window.loadLocalData = loadLocalData;
-        window.saveLocalData = saveLocalData;
-
-        async function initFirebase() {
-            try {
-                if (!firebaseConfig || Object.keys(firebaseConfig).length === 0 || !firebaseConfig.apiKey) {
-                    window.auth = null;
-                    window.db = null;
-                    loadLocalData();
-                    renderScheduleList();
-                    renderHistoryList();
-                    updateProgressRing();
-                    updateProfileStats();
-                    updateMapPins();
-                    return;
-                }
-                const app = initializeApp(firebaseConfig);
-                window.db = getFirestore(app);
-                window.auth = getAuth(app);
-
-                onAuthStateChanged(window.auth, async (user) => {
-                    if (user) {
-                        window.userId = user.uid;
-                        updateProfileUI();
-                        if (typeof window.loadCloudData === 'function') {
-                            window.loadCloudData();
-                        }
-                    } else {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(window.auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(window.auth);
-                        }
-                    }
-                });
-            } catch (err) {
-                loadLocalData();
-                renderScheduleList();
-                renderHistoryList();
-                updateProgressRing();
-                updateProfileStats();
-                updateMapPins();
-            }
-        }
-        initFirebase();
-    </script>
 
     <script>
         const HK_CENTER = [22.3193, 114.1694];
@@ -626,84 +536,117 @@
         let completedChallenges = {};
         let completionDates = {};
         let hikeHistory = [];
+        let shownState = { completedChallenges: {}, completionDates: {}, hikes: [] };
 
-        window.loadCloudData = async function() {
-            if (typeof window.loadLocalData === 'function') window.loadLocalData();
+        function cloneTrackerState(state) {
+            return JSON.parse(JSON.stringify(state || { completedChallenges: {}, completionDates: {}, hikes: [] }));
+        }
 
-            if (!window.db || !window.userId) {
+        function currentTrackerState() {
+            return cloneTrackerState({
+                completedChallenges,
+                completionDates,
+                hikes: hikeHistory
+            });
+        }
+
+        window.trackerBridge = {
+            getState: currentTrackerState,
+            replaceState(next) {
+                const safe = next || {};
+                completedChallenges = { ...(safe.completedChallenges || {}) };
+                completionDates = { ...(safe.completionDates || {}) };
+                hikeHistory = Array.isArray(safe.hikes) ? safe.hikes.map(hike => ({ ...hike })) : [];
+                shownState = currentTrackerState();
                 renderScheduleList();
                 renderHistoryList();
                 updateProgressRing();
                 updateProfileStats();
                 updateMapPins();
-                return;
             }
+        };
 
+        function writeGuestFallback(state) {
             try {
-                const progRef = window.doc(window.db, 'artifacts', window.appId, 'users', window.userId, 'settings', 'progress');
-                const progSnap = await window.getDoc(progRef);
-                if (progSnap.exists()) {
-                    const data = progSnap.data();
-                    completedChallenges = data.completedChallenges || {};
-                    completionDates = data.completionDates || {};
-                }
+                localStorage.setItem('hk100_guest_v1', JSON.stringify(state));
+            } catch (err) {}
+        }
 
-                const histCol = window.collection(window.db, 'artifacts', window.appId, 'users', window.userId, 'history');
-                const histSnap = await window.getDocs(histCol);
-                if (!histSnap.empty) {
-                    hikeHistory = [];
-                    histSnap.forEach(d => {
-                        hikeHistory.push({ id: d.id, ...d.data() });
-                    });
-                    hikeHistory.sort((a, b) => b.id - a.id);
+        function loadGuestFallback() {
+            let next = null;
+            try {
+                const primary = localStorage.getItem('hk100_guest_v1');
+                if (primary) {
+                    next = JSON.parse(primary);
+                } else {
+                    const progress = JSON.parse(localStorage.getItem('hk100_progress_default-app-id') || 'null');
+                    const history = JSON.parse(localStorage.getItem('hk100_history_default-app-id') || 'null');
+                    if (progress || Array.isArray(history)) {
+                        next = {
+                            completedChallenges: progress && progress.completedChallenges || {},
+                            completionDates: progress && progress.completionDates || {},
+                            hikes: Array.isArray(history) ? history : []
+                        };
+                    }
                 }
-            } catch (e) {}
+            } catch (err) {
+                next = null;
+            }
+            if (next) window.trackerBridge.replaceState(next);
+            else refreshTrackerViews();
+            const syncEl = document.getElementById('account-sync');
+            if (syncEl && !window.trackerSync) {
+                syncEl.textContent = 'Saved on this device. Google sign-in did not load.';
+            }
+        }
 
-            if (typeof window.saveLocalData === 'function') window.saveLocalData();
+        function refreshTrackerViews() {
             renderScheduleList();
             renderHistoryList();
             updateProgressRing();
             updateProfileStats();
             updateMapPins();
+        }
+
+        function persistTracker() {
+            const payload = { shown: cloneTrackerState(shownState), ui: currentTrackerState() };
+            if (!window.__trackerLoaded || !window.trackerSync || typeof window.trackerSync.saveEdit !== 'function') {
+                window.__pendingTrackerEdit = payload;
+                if (window.__trackerLoaded) writeGuestFallback(payload.ui);
+                return Promise.resolve();
+            }
+            return window.trackerSync.saveEdit(payload.shown, payload.ui).then(() => {
+                shownState = currentTrackerState();
+            });
+        }
+
+        window.__consumePendingTrackerEdit = function() {
+            const pending = window.__pendingTrackerEdit || null;
+            window.__pendingTrackerEdit = null;
+            return pending;
         };
 
-        async function saveCloudProgress() {
-            if (typeof window.saveLocalData === 'function') window.saveLocalData();
-            if (!window.db || !window.userId) return;
-            try {
-                const progRef = window.doc(window.db, 'artifacts', window.appId, 'users', window.userId, 'settings', 'progress');
-                await window.setDoc(progRef, { completedChallenges, completionDates }, { merge: true });
-            } catch (e) {}
+        window.loginWithGoogle = window.loginWithGoogle || function() {
+            showIOSAlert('Sign in', 'Sign-in is still loading. Wait a moment and try again.', [{ text: 'OK', style: 'cancel' }]);
+        };
+
+        const signInButton = document.getElementById('btn-google-sign-in');
+        if (signInButton) {
+            signInButton.addEventListener('click', () => window.loginWithGoogle());
         }
 
-        async function saveHikeToCloud(hikeData) {
-            if (typeof window.saveLocalData === 'function') window.saveLocalData();
-            if (!window.db || !window.userId) return 'local_' + Date.now();
-            try {
-                const histCol = window.collection(window.db, 'artifacts', window.appId, 'users', window.userId, 'history');
-                const docRef = await window.addDoc(histCol, hikeData);
-                return docRef.id;
-            } catch (e) {
-                return 'local_' + Date.now();
-            }
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[ch]));
         }
 
-        async function updateHikeInCloud(docId, hikeData) {
-            if (typeof window.saveLocalData === 'function') window.saveLocalData();
-            if (!window.db || !window.userId || String(docId).startsWith('local_')) return;
-            try {
-                const hikeRef = window.doc(window.db, 'artifacts', window.appId, 'users', window.userId, 'history', String(docId));
-                await window.setDoc(hikeRef, hikeData, { merge: true });
-            } catch (e) {}
-        }
-
-        async function deleteHikeFromCloud(docId) {
-            if (typeof window.saveLocalData === 'function') window.saveLocalData();
-            if (!window.db || !window.userId || String(docId).startsWith('local_')) return;
-            try {
-                const hikeRef = window.doc(window.db, 'artifacts', window.appId, 'users', window.userId, 'history', String(docId));
-                await window.deleteDoc(hikeRef);
-            } catch (e) {}
+        function safeImageSrc(src) {
+            return typeof src === 'string' && /^data:image\/(?:jpeg|jpg|png|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(src) ? src : '';
         }
 
         function showIOSAlert(title, message, buttons) {
@@ -942,26 +885,25 @@
             const defaultName = `Hike - ${currentDateStr} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
             
             const newHike = {
+                id: typeof window.createHikeId === 'function' ? window.createHikeId() : `hike_${Date.now()}`,
                 name: defaultName,
                 date: currentDateStr,
                 distance: distance.toFixed(2),
                 duration: duration,
-                points: positions,
+                points: positions.map(point => [point[0], point[1]]),
                 weather: currentWeatherString,
                 comment: "",
                 photo: null,
-                weekId: null
+                weekId: null,
+                createdAt: Date.now()
             };
 
-            const docId = await saveHikeToCloud(newHike);
-            if (docId) {
-                newHike.id = docId;
-                hikeHistory.unshift(newHike);
-            }
-            
-            showIOSAlert("Saved", "Your hike has been saved to history.", [{ text: "OK", style: "cancel" }]);
+            hikeHistory.unshift(newHike);
             renderHistoryList();
             updateProfileStats();
+            await persistTracker();
+            
+            showIOSAlert("Saved", "Your hike has been saved to history.", [{ text: "OK", style: "cancel" }]);
             resetTracker();
         }
 
@@ -1082,12 +1024,13 @@
             }
             
             hikeHistory.forEach((hike) => {
-                const m = Math.floor(hike.duration / 60);
-                const s = hike.duration % 60;
-                
-                const commentHtml = hike.comment ? `<p class="text-sm text-gray-300 mt-2 border-l-2 border-[#0A84FF] pl-3 italic">"${hike.comment}"</p>` : '';
-                const photoHtml = hike.photo ? `<img src="${hike.photo}" class="w-full h-40 object-cover rounded-xl mt-3 border border-white/5 shadow-md">` : '';
-                const weatherHtml = hike.weather && hike.weather !== "--" ? `<span class="text-[10px] text-gray-400 bg-white/10 px-2 py-0.5 rounded-md"><i class="fa-solid fa-cloud-sun"></i> ${hike.weather}</span>` : '';
+                const safeDuration = Number(hike.duration) || 0;
+                const m = Math.floor(safeDuration / 60);
+                const s = safeDuration % 60;
+                const photoSrc = safeImageSrc(hike.photo);
+                const commentHtml = hike.comment ? `<p class="text-sm text-gray-300 mt-2 border-l-2 border-[#0A84FF] pl-3 italic">"${escapeHtml(hike.comment)}"</p>` : '';
+                const photoHtml = photoSrc ? `<img src="${photoSrc}" class="w-full h-40 object-cover rounded-xl mt-3 border border-white/5 shadow-md" alt="">` : '';
+                const weatherHtml = hike.weather && hike.weather !== "--" ? `<span class="text-[10px] text-gray-400 bg-white/10 px-2 py-0.5 rounded-md"><i class="fa-solid fa-cloud-sun"></i> ${escapeHtml(hike.weather)}</span>` : '';
                 
                 let peakInfoHtml = '';
                 if (hike.weekId) {
@@ -1095,8 +1038,8 @@
                     if (matchedWeek) {
                         peakInfoHtml = `
                             <div class="mt-2 bg-[#0A84FF]/10 border border-[#0A84FF]/30 p-2.5 rounded-xl">
-                                <span class="text-[10px] font-bold text-[#0A84FF] uppercase tracking-wider block">${matchedWeek.week} • Completed Peaks</span>
-                                <p class="text-sm font-bold text-white mt-0.5">${matchedWeek.peaks}</p>
+                                <span class="text-[10px] font-bold text-[#0A84FF] uppercase tracking-wider block">${escapeHtml(matchedWeek.week)} • Completed Peaks</span>
+                                <p class="text-sm font-bold text-white mt-0.5">${escapeHtml(matchedWeek.peaks)}</p>
                             </div>
                         `;
                     }
@@ -1107,14 +1050,14 @@
                 card.innerHTML = `
                     <div class="flex justify-between items-start mb-2">
                         <div>
-                            <h3 class="font-bold text-lg text-white mb-1">${hike.name || "Hike Route"}</h3>
+                            <h3 class="font-bold text-lg text-white mb-1">${escapeHtml(hike.name || "Hike Route")}</h3>
                             <div class="flex items-center space-x-2">
-                                <p class="text-[11px] text-gray-400 uppercase tracking-wider">${hike.date}</p>
+                                <p class="text-[11px] text-gray-400 uppercase tracking-wider">${escapeHtml(hike.date)}</p>
                                 ${weatherHtml}
                             </div>
                         </div>
                         <div class="text-right">
-                            <p class="font-bold text-2xl text-white">${hike.distance} <span class="text-xs font-normal text-gray-400">km</span></p>
+                            <p class="font-bold text-2xl text-white">${escapeHtml(hike.distance)} <span class="text-xs font-normal text-gray-400">km</span></p>
                             <p class="font-semibold text-[#0A84FF] text-sm mt-0.5">${m}m ${s}s</p>
                         </div>
                     </div>
@@ -1122,13 +1065,13 @@
                     ${commentHtml}
                     ${photoHtml}
                     <div class="flex justify-end space-x-2 mt-4 pt-3 border-t border-white/5">
-                        <button onclick="viewHikeOnMap('${hike.id}')" class="bg-[#0A84FF]/20 text-[#0A84FF] text-[12px] px-3.5 py-1.5 rounded-full hover:bg-[#0A84FF]/30 active:scale-95 transition-all flex items-center space-x-1">
+                        <button type="button" data-hike-action="view" data-hike-id="${escapeHtml(hike.id)}" class="bg-[#0A84FF]/20 text-[#0A84FF] text-[12px] px-3.5 py-1.5 rounded-full hover:bg-[#0A84FF]/30 active:scale-95 transition-all flex items-center space-x-1">
                             <i class="fa-solid fa-map-location-dot text-[10px]"></i> <span>View</span>
                         </button>
-                        <button onclick="openEditModal('${hike.id}')" class="bg-white/10 text-white text-[12px] px-3.5 py-1.5 rounded-full hover:bg-white/20 active:scale-95 transition-all flex items-center space-x-1">
+                        <button type="button" data-hike-action="edit" data-hike-id="${escapeHtml(hike.id)}" class="bg-white/10 text-white text-[12px] px-3.5 py-1.5 rounded-full hover:bg-white/20 active:scale-95 transition-all flex items-center space-x-1">
                             <i class="fa-solid fa-pen text-[10px]"></i> <span>Edit</span>
                         </button>
-                        <button onclick="deleteHike('${hike.id}')" class="bg-red-500/20 text-red-400 text-[12px] px-3.5 py-1.5 rounded-full hover:bg-red-500/30 active:scale-95 transition-all flex items-center space-x-1">
+                        <button type="button" data-hike-action="delete" data-hike-id="${escapeHtml(hike.id)}" class="bg-red-500/20 text-red-400 text-[12px] px-3.5 py-1.5 rounded-full hover:bg-red-500/30 active:scale-95 transition-all flex items-center space-x-1">
                             <i class="fa-solid fa-trash text-[10px]"></i> <span>Delete</span>
                         </button>
                     </div>
@@ -1136,6 +1079,16 @@
                 container.appendChild(card);
             });
         }
+
+        document.getElementById('history-list').addEventListener('click', (event) => {
+            const button = event.target.closest('button[data-hike-action]');
+            if (!button) return;
+            const id = button.getAttribute('data-hike-id');
+            const action = button.getAttribute('data-hike-action');
+            if (action === 'view') viewHikeOnMap(id);
+            else if (action === 'edit') openEditModal(id);
+            else if (action === 'delete') deleteHike(id);
+        });
 
         window.viewHikeOnMap = function(id) {
             let hike = hikeHistory.find(h => String(h.id) === String(id));
@@ -1166,17 +1119,11 @@
                         if (targetHike && targetHike.weekId) {
                             delete completedChallenges[targetHike.weekId];
                             delete completionDates[targetHike.weekId];
-                            await saveCloudProgress();
                         }
 
-                        await deleteHikeFromCloud(id);
                         hikeHistory = hikeHistory.filter(h => String(h.id) !== String(id));
-                        
-                        renderHistoryList();
-                        renderScheduleList();
-                        updateProgressRing();
-                        updateProfileStats();
-                        updateMapPins();
+                        refreshTrackerViews();
+                        await persistTracker();
                     } 
                 }
             ]);
@@ -1260,14 +1207,8 @@
                     completionDates[wId] = hikeHistory[index].date;
                 }
 
-                await saveCloudProgress();
-                await updateHikeInCloud(currentEditId, hikeHistory[index]);
-                
-                renderHistoryList();
-                renderScheduleList();
-                updateProgressRing();
-                updateProfileStats();
-                updateMapPins();
+                refreshTrackerViews();
+                await persistTracker();
             }
             closeEditModal();
         };
@@ -1308,8 +1249,8 @@
             let totalDur = 0;
             
             hikeHistory.forEach(h => {
-                totalDist += parseFloat(h.distance);
-                totalDur += parseInt(h.duration);
+                totalDist += Number(h.distance) || 0;
+                totalDur += Number(h.duration) || 0;
             });
             
             document.getElementById('total-distance').innerText = totalDist.toFixed(1);
@@ -1324,11 +1265,17 @@
 
             document.getElementById('hk100BadgeCount').innerText = `${completedPeaks} / 100`;
             const badgeIcon = document.getElementById('hk100BadgeIcon');
-            
+            const badgeMark = badgeIcon.querySelector('i');
             if (completedPeaks >= 100) {
-                badgeIcon.classList.replace('bg-gray-800', 'bg-[#34C759]');
-                badgeIcon.classList.replace('border-gray-600', 'border-green-400');
-                badgeIcon.querySelector('i').classList.replace('text-gray-500', 'text-white');
+                badgeIcon.classList.remove('bg-gray-800', 'border-gray-600');
+                badgeIcon.classList.add('bg-[#34C759]', 'border-green-400');
+                badgeMark.classList.remove('text-gray-500');
+                badgeMark.classList.add('text-white');
+            } else {
+                badgeIcon.classList.remove('bg-[#34C759]', 'border-green-400');
+                badgeIcon.classList.add('bg-gray-800', 'border-gray-600');
+                badgeMark.classList.remove('text-white');
+                badgeMark.classList.add('text-gray-500');
             }
         }
 
@@ -1359,11 +1306,18 @@
             }
         };
 
-        window.onload = function() {
+        window.addEventListener('load', async function() {
             initMap();
             switchTab('map'); 
             
             fetchWeather(HK_CENTER[0], HK_CENTER[1]);
+            refreshTrackerViews();
+
+            if (typeof window.startTrackerSync === 'function') await window.startTrackerSync();
+            else {
+                loadGuestFallback();
+                window.__trackerLoaded = true;
+            }
             
             if (navigator.geolocation) {
                 geoWatchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
@@ -1371,7 +1325,8 @@
                     maximumAge: 0
                 });
             }
-        };
+        });
     </script>
+    <script type="module" src="./js/boot.js"></script>
 </body>
 </html>
