@@ -69,3 +69,7 @@ Popup sign-in is the normal path. If the browser blocks the popup, the app conti
 - **Popup blocked:** allow popups, or stay on the page while the redirect continues. The redirect must return through `https://hk100done-tracker.firebaseapp.com/__/auth/handler`.
 - **Google account chooser closes immediately, or only some accounts work:** the OAuth consent screen is likely still in Testing. Add that Google account as a test user.
 - **Saved on this device / cloud save was denied:** publish `firestore.rules`. A missing network leaves the same on-device copy and retries when the browser is back online.
+
+## Strava and GPX
+
+Hike export is separate from Google sign-in. See `docs/STRAVA.md`.
