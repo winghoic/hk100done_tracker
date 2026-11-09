@@ -53,6 +53,21 @@ export function trackAvailability(hike) {
     };
 }
 
+export function prepareGpxDownload(hike, now = Date.now()) {
+    const availability = trackAvailability(hike);
+    if (!availability.available) {
+        return { ok: false, message: availability.message || trackAvailability({}).message };
+    }
+    const gpx = buildGpx(hike, now);
+    if (!gpx) return { ok: false, message: availability.message || trackAvailability({}).message };
+    return {
+        ok: true,
+        filename: gpxFilename(hike),
+        contents: gpx,
+        message: "GPX file downloaded.",
+    };
+}
+
 export function gpxFilename(hike) {
     const cleaned = String(hike?.name || "hike")
         .replace(/[^\p{L}\p{N}._-]+/gu, "-")

@@ -261,20 +261,6 @@
             </div>
 
             <div class="glass-card rounded-3xl p-6">
-                <h2 class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-4">Strava</h2>
-                <div class="flex items-center space-x-3 mb-4">
-                    <div class="w-12 h-12 rounded-full bg-[#FC4C02]/15 border border-[#FC4C02]/40 flex items-center justify-center text-[#FC4C02] text-xl shrink-0">
-                        <i class="fa-brands fa-strava"></i>
-                    </div>
-                    <div class="min-w-0">
-                        <p id="strava-name" class="font-bold text-white text-base">Not connected</p>
-                        <p id="strava-status" class="text-xs text-gray-400 mt-1 leading-snug">GPX download works without Strava. Upload needs a one-time connection.</p>
-                    </div>
-                </div>
-                <div id="strava-action-area"></div>
-            </div>
-
-            <div class="glass-card rounded-3xl p-6">
                 <h2 class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-4">Lifetime Stats</h2>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
@@ -380,7 +366,6 @@
             <div class="p-5">
                 <h3 id="ios-alert-title" class="text-[17px] font-semibold text-white mb-1">Title</h3>
                 <p id="ios-alert-message" class="text-[13px] text-gray-300 leading-tight">Message goes here.</p>
-                <a id="ios-alert-link" class="hidden mt-3 block text-[15px] font-semibold text-[#FC4C02]" target="_blank" rel="noopener noreferrer"></a>
             </div>
             <div id="ios-alert-buttons" class="flex border-t border-white/10"></div>
         </div>
@@ -579,10 +564,6 @@
                 updateProfileStats();
                 updateMapPins();
             },
-            hikeExportContext(hike) {
-                const week = hk100Data.find(item => hike && Number(item.id) === Number(hike.weekId));
-                return week ? { weekLabel: `${week.week}: ${week.peaks}` } : {};
-            }
         };
 
         function writeGuestFallback(state) {
@@ -668,34 +649,10 @@
             return typeof src === 'string' && /^data:image\/(?:jpeg|jpg|png|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(src) ? src : '';
         }
 
-        function safeStravaHref(href) {
-            try {
-                const url = new URL(href);
-                if (url.protocol !== 'https:') return '';
-                if (url.hostname !== 'www.strava.com' && url.hostname !== 'strava.com') return '';
-                return url.toString();
-            } catch (err) {
-                return '';
-            }
-        }
-
-        function showIOSAlert(title, message, buttons, options) {
+        function showIOSAlert(title, message, buttons) {
             document.getElementById('ios-alert-title').innerText = title;
             document.getElementById('ios-alert-message').innerText = message;
-            const link = document.getElementById('ios-alert-link');
-            const href = safeStravaHref(options && options.href);
-            if (link) {
-                if (href) {
-                    link.href = href;
-                    link.textContent = (options && options.label) || 'Open on Strava';
-                    link.classList.remove('hidden');
-                } else {
-                    link.classList.add('hidden');
-                    link.removeAttribute('href');
-                    link.textContent = '';
-                }
-            }
-            
+
             const btnContainer = document.getElementById('ios-alert-buttons');
             btnContainer.innerHTML = '';
             const stacked = buttons.length > 2;
@@ -950,9 +907,8 @@
             updateProfileStats();
             await persistTracker();
             
-            showIOSAlert("Saved", "Your hike is in History. Download the GPX file, or export it to Strava.", [
+            showIOSAlert("Saved", "Your hike is in History. Download the GPX file.", [
                 { text: "Download GPX", style: "default", action: () => window.downloadHikeGpx && window.downloadHikeGpx(newHike.id) },
-                { text: "Export to Strava", style: "default", action: () => window.exportHikeToStrava && window.exportHikeToStrava(newHike.id) },
                 { text: "Done", style: "cancel" }
             ]);
             resetTracker();
@@ -1122,9 +1078,6 @@
                         <button type="button" data-hike-action="gpx" data-hike-id="${escapeHtml(hike.id)}" class="bg-white/10 text-white text-[12px] px-3.5 py-1.5 rounded-full hover:bg-white/20 active:scale-95 transition-all flex items-center space-x-1">
                             <i class="fa-solid fa-file-arrow-down text-[10px]"></i> <span>Download GPX</span>
                         </button>
-                        <button type="button" data-hike-action="strava" data-hike-id="${escapeHtml(hike.id)}" class="bg-[#FC4C02]/15 text-[#FC4C02] text-[12px] px-3.5 py-1.5 rounded-full hover:bg-[#FC4C02]/25 active:scale-95 transition-all flex items-center space-x-1">
-                            <i class="fa-brands fa-strava text-[10px]"></i> <span>Export to Strava</span>
-                        </button>
                         <button type="button" data-hike-action="view" data-hike-id="${escapeHtml(hike.id)}" class="bg-[#0A84FF]/20 text-[#0A84FF] text-[12px] px-3.5 py-1.5 rounded-full hover:bg-[#0A84FF]/30 active:scale-95 transition-all flex items-center space-x-1">
                             <i class="fa-solid fa-map-location-dot text-[10px]"></i> <span>View</span>
                         </button>
@@ -1149,7 +1102,6 @@
             else if (action === 'edit') openEditModal(id);
             else if (action === 'delete') deleteHike(id);
             else if (action === 'gpx' && typeof window.downloadHikeGpx === 'function') window.downloadHikeGpx(id);
-            else if (action === 'strava' && typeof window.exportHikeToStrava === 'function') window.exportHikeToStrava(id);
         });
 
         window.viewHikeOnMap = function(id) {
