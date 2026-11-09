@@ -5,22 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>HK 31-Week Peaks Tracker</title>
+    <title>香港百登 · Personal Tracker</title>
+    <meta name="theme-color" content="#e2b03a">
+    <link rel="icon" href="assets/hk100-seal.png" type="image/png">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700;900&display=swap" rel="stylesheet">
     
     <style>
         :root {
             --safe-area-top: env(safe-area-inset-top, 0px);
             --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+            --red: #c81018;
+            --red-ink: #8d1218;
+            --gold: #e2b03a;
+            --gold-bright: #f6e3a4;
+            --gold-deep: #c99216;
+            --navy: #10233a;
+            --navy-2: #173352;
+            --cream: #fffaf0;
+            --ink-soft: #5c4630;
+            --mountain: #323940;
         }
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #000;
-            color: white;
+            font-family: "Noto Sans TC", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--gold-deep);
+            color: var(--navy);
             user-select: none;
             -webkit-user-select: none;
             overflow: hidden;
@@ -40,31 +52,705 @@
         }
 
         .glass-panel {
-            background: rgba(30, 30, 30, 0.75);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            background: linear-gradient(180deg, rgba(255, 248, 226, 0.96), rgba(240, 206, 112, 0.94));
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            color: var(--navy);
         }
         
         .glass-card {
-            background: rgba(40, 40, 40, 0.85);
+            background: rgba(16, 35, 58, 0.94);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(226, 176, 58, 0.28);
+            color: var(--cream);
+        }
+
+        .glass-card .text-gray-400,
+        .glass-card .text-gray-500,
+        .glass-card .text-gray-300 {
+            color: #d7e0ea !important;
+        }
+
+        .glass-card h2 {
+            color: var(--gold-bright) !important;
+            letter-spacing: 0.14em;
         }
 
         .tab-bar {
-            padding-bottom: calc(15px + var(--safe-area-bottom));
-            padding-top: 10px;
+            padding-bottom: calc(12px + var(--safe-area-bottom));
+            padding-top: 8px;
             z-index: 50;
+            background: linear-gradient(180deg, #1a334d 0%, #0e2033 100%);
+            border-top: 3px solid var(--gold);
+            box-shadow: 0 -8px 24px rgba(16, 35, 58, 0.18);
         }
         
         .tab-icon {
-            color: #8E8E93;
-            transition: all 0.2s ease;
+            color: rgba(255, 244, 214, 0.62);
+            transition: color 0.2s ease;
         }
         .tab-active {
-            color: #0A84FF;
+            color: var(--gold-bright);
+        }
+
+        .tab-bar button {
+            min-height: 48px;
+            min-width: 56px;
+        }
+
+        .brand-header {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: calc(12px + var(--safe-area-top)) 16px 12px;
+            background: linear-gradient(180deg, rgba(255, 248, 226, 0.98), rgba(240, 206, 112, 0.96));
+            box-shadow: inset 0 -3px 0 var(--red);
+        }
+
+        .brand-lockup {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .brand-seal,
+        .home-seal {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(80, 40, 0, 0.28);
+            background: #d7b15a;
+        }
+
+        .brand-zh {
+            font-family: "Noto Serif TC", serif;
+            font-weight: 900;
+            font-size: 13px;
+            letter-spacing: 0.18em;
+            color: var(--red-ink);
+            line-height: 1.15;
+        }
+
+        .brand-header h1 {
+            font-family: "Noto Serif TC", "Noto Sans TC", serif;
+            font-size: 26px;
+            line-height: 1.05;
+            color: var(--navy);
+            font-weight: 900;
+            margin: 1px 0 0;
+        }
+
+        .brand-personal {
+            margin-top: 2px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--ink-soft);
+        }
+
+        #scheduleProgressText {
+            color: var(--red-ink);
+            font-weight: 800;
+            font-size: 11px;
+            line-height: 1.1;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .home-stack {
+            padding-top: calc(12px + var(--safe-area-top));
+            gap: 10px;
+        }
+
+        .home-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(180deg, rgba(255, 248, 226, 0.97), rgba(236, 196, 78, 0.95));
+            border-radius: 999px;
+            padding: 5px 16px 5px 5px;
+            box-shadow: 0 10px 24px rgba(80, 48, 0, 0.28);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .home-seal {
+            width: 48px;
+            height: 48px;
+        }
+
+        .home-zh {
+            font-family: "Noto Serif TC", serif;
+            font-weight: 900;
+            font-size: 20px;
+            color: var(--navy);
+            line-height: 1.05;
+        }
+
+        .home-en {
+            font-size: 11px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--red-ink);
+            font-weight: 800;
+        }
+
+        .home-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 999px;
+            padding: 10px 16px;
+            background: var(--navy);
+            border: 1px solid rgba(226, 176, 58, 0.45);
+            box-shadow: 0 8px 18px rgba(16, 35, 58, 0.25);
+        }
+
+        .home-status span {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            color: var(--cream);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--gold-bright);
+            box-shadow: 0 0 0 4px rgba(246, 227, 164, 0.18);
+        }
+
+        #map-zoom-controls {
+            top: calc(8.25rem + var(--safe-area-top)) !important;
+        }
+
+        #map-zoom-controls button {
+            background: var(--navy);
+            color: var(--gold-bright);
+            border: 1px solid rgba(246, 213, 106, 0.5);
+            width: 44px;
+            height: 44px;
+        }
+
+        #view-record::before {
+            top: 118px;
+            bottom: auto;
+            height: 220px;
+        }
+
+        .record-stage {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 12px 16px 22px;
+            position: relative;
+            min-height: 0;
+        }
+
+        .record-watermark {
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            width: 150px;
+            height: 150px;
+            transform: translateX(-50%);
+            opacity: 0.28;
+            pointer-events: none;
+        }
+
+        .record-card {
+            position: relative;
+            z-index: 1;
+            border-radius: 32px;
+            padding: 24px;
+            background: rgba(16, 35, 58, 0.94);
+            color: var(--cream);
+            border: 1px solid rgba(226, 176, 58, 0.35);
+            box-shadow: 0 16px 40px rgba(16, 35, 58, 0.28);
+        }
+
+        .record-card .text-gray-400,
+        .record-card .text-gray-300 {
+            color: #d7e0ea !important;
+        }
+
+        #timer-display {
+            font-family: Inter, sans-serif;
+            color: var(--cream);
+            font-weight: 500;
+        }
+
+        .record-card .bg-white\/5 {
+            background: rgba(255, 248, 220, 0.08);
+            border: 1px solid rgba(240, 206, 112, 0.22);
+        }
+
+        #btn-start,
+        #btn-resume {
+            background: radial-gradient(circle at 40% 35%, #ffe9a8, #e2b03a 58%, #b8860b) !important;
+            box-shadow: 0 10px 24px rgba(120, 72, 0, 0.35) !important;
+            width: 76px;
+            height: 76px;
+        }
+
+        #btn-start i,
+        #btn-resume i {
+            color: var(--navy) !important;
+        }
+
+        #btn-pause {
+            background: var(--navy-2) !important;
+            border: 2px solid var(--gold) !important;
+            box-shadow: 0 10px 24px rgba(16, 35, 58, 0.35) !important;
+            width: 76px;
+            height: 76px;
+        }
+
+        #btn-stop {
+            background: radial-gradient(circle at 40% 35%, #ef3d45, #c81018 62%, #8a0d13) !important;
+            box-shadow: 0 10px 24px rgba(140, 12, 18, 0.4) !important;
+            width: 76px;
+            height: 76px;
+        }
+
+        .peak-card,
+        .hike-card {
+            background: var(--navy);
+            color: var(--cream);
+            border: 1px solid rgba(226, 176, 58, 0.28);
+            box-shadow: 0 10px 22px rgba(80, 48, 0, 0.12);
+        }
+
+        .peak-card {
+            margin: 0 16px;
+            padding: 16px;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .peak-card.is-done {
+            border-color: var(--gold);
+            box-shadow: inset 4px 0 0 var(--gold), 0 10px 22px rgba(80, 48, 0, 0.12);
+        }
+
+        .peak-top,
+        .hike-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: flex-start;
+        }
+
+        .peak-meta,
+        .hike-date {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            min-width: 0;
+        }
+
+        .peak-week {
+            background: var(--red);
+            color: var(--cream);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            padding: 4px 8px;
+            border-radius: 999px;
+        }
+
+        .peak-card.is-done .peak-week {
+            background: var(--gold);
+            color: var(--navy);
+        }
+
+        .peak-district {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--cream);
+        }
+
+        .peak-count {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+            color: #d7e0ea;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .peak-count .fa-flag {
+            color: var(--gold);
+            margin-right: 4px;
+        }
+
+        .peak-check i {
+            color: var(--navy);
+            font-size: 12px;
+            line-height: 1;
+        }
+
+        .peak-check {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            border: 2px solid rgba(215, 224, 234, 0.55);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--navy);
+            font-size: 11px;
+        }
+
+        .peak-card.is-done .peak-check {
+            background: var(--gold);
+            border-color: var(--gold);
+        }
+
+        .peak-names {
+            margin: 10px 0 8px;
+            font-size: 16px;
+            line-height: 1.35;
+            font-weight: 800;
+            color: var(--cream);
+        }
+
+        .peak-card.is-done .peak-names {
+            color: #f6e7b0;
+            text-decoration: line-through;
+            text-decoration-color: rgba(246, 213, 106, 0.75);
+        }
+
+        .peak-done-date {
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--gold-bright);
+        }
+
+        .peak-facts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 12px;
+            background: rgba(255, 248, 220, 0.06);
+            color: #d7e0ea;
+            font-size: 12px;
+            line-height: 1.35;
+        }
+
+        .peak-facts i {
+            color: var(--gold);
+            margin-right: 6px;
+        }
+
+        .hike-card {
+            padding: 18px;
+            border-radius: 24px;
+            position: relative;
+        }
+
+        .hike-card h3 {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--cream);
+            margin-bottom: 4px;
+        }
+
+        .hike-date {
+            color: #d7e0ea;
+            font-size: 11px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .hike-weather {
+            font-size: 11px;
+            color: var(--navy);
+            background: var(--gold-bright);
+            border-radius: 6px;
+            padding: 2px 6px;
+            letter-spacing: 0;
+            text-transform: none;
+            font-weight: 700;
+        }
+
+        .hike-distance {
+            text-align: right;
+            font-weight: 800;
+            font-size: 24px;
+            color: var(--cream);
+            line-height: 1;
+        }
+
+        .hike-distance span {
+            font-size: 12px;
+            font-weight: 600;
+            color: #d7e0ea;
+        }
+
+        .hike-duration {
+            margin-top: 4px;
+            text-align: right;
+            color: var(--gold-bright);
+            font-weight: 800;
+            font-size: 14px;
+        }
+
+        .hike-peaks {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(226, 176, 58, 0.12);
+            border: 1px solid rgba(226, 176, 58, 0.4);
+        }
+
+        .hike-peaks span {
+            display: block;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--gold-bright);
+        }
+
+        .hike-peaks p {
+            margin-top: 2px;
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--cream);
+        }
+
+        .hike-comment {
+            margin-top: 10px;
+            padding-left: 12px;
+            border-left: 3px solid var(--gold);
+            color: #f3e6c0;
+            font-size: 14px;
+            font-style: italic;
+        }
+
+        .hike-photo {
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+            border-radius: 12px;
+            margin-top: 12px;
+            border: 1px solid rgba(226, 176, 58, 0.28);
+        }
+
+        .hike-note {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #d7e0ea;
+        }
+
+        .hike-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 248, 220, 0.1);
+        }
+
+        .hike-action {
+            min-height: 40px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 248, 220, 0.1);
+            color: var(--cream);
+        }
+
+        .hike-action-view {
+            background: var(--gold);
+            color: var(--navy);
+        }
+
+        .hike-action-danger {
+            background: rgba(200, 16, 24, 0.18);
+            color: #ffc4c2;
+        }
+
+        .history-empty {
+            text-align: center;
+            margin: 36px 24px;
+            color: var(--navy);
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .brand-progress {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            flex-shrink: 0;
+        }
+
+        .progress-fab {
+            position: relative;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: var(--navy);
+            border: 1px solid rgba(226, 176, 58, 0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .progress-fab svg {
+            width: 48px;
+            height: 48px;
+        }
+
+        #progressRingSvg {
+            stroke: var(--gold-bright);
+        }
+
+        #user-avatar-icon {
+            background: rgba(246, 227, 164, 0.16) !important;
+            border: 1px solid rgba(246, 227, 164, 0.7) !important;
+            color: var(--gold-bright) !important;
+        }
+
+        #total-distance,
+        #total-time {
+            color: var(--gold-bright);
+        }
+
+        .award-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 12px;
+            border-radius: 16px;
+            background: rgba(255, 248, 220, 0.06);
+            border: 1px solid rgba(226, 176, 58, 0.28);
+        }
+
+        .award-seal {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            overflow: hidden;
+            flex-shrink: 0;
+            box-shadow: 0 0 0 2px rgba(255, 248, 220, 0.25);
+            background: #d7b15a;
+        }
+
+        .award-seal img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .award-seal.is-complete {
+            box-shadow: 0 0 0 3px var(--gold-bright), 0 0 18px rgba(246, 227, 164, 0.75);
+        }
+
+        .award-count {
+            margin-top: 8px;
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 800;
+            color: var(--navy);
+            background: var(--gold);
+            border-radius: 8px;
+            padding: 4px 8px;
+        }
+
+        .fan-note {
+            font-size: 13px;
+            line-height: 1.4;
+            color: var(--navy);
+            background: rgba(255, 250, 240, 0.88);
+            border-radius: 16px;
+            padding: 10px 14px;
+            border: 1px solid rgba(16, 35, 58, 0.08);
+        }
+
+        .sheet {
+            background: linear-gradient(180deg, #1c4468 0%, #10233a 30%);
+            color: var(--cream);
+            border-top: 3px solid var(--red);
+        }
+
+        #edit-modal input[type="text"],
+        #edit-modal textarea,
+        #edit-modal select {
+            background: var(--cream) !important;
+            color: var(--navy) !important;
+            border: 1.5px solid rgba(16, 35, 58, 0.18) !important;
+            min-height: 48px;
+        }
+
+        #edit-modal textarea {
+            min-height: 96px;
+        }
+
+        #edit-modal input:focus,
+        #edit-modal textarea:focus,
+        #edit-modal select:focus {
+            border-color: var(--red) !important;
+            outline: none;
+        }
+
+        #edit-modal option {
+            color: var(--navy);
+            background: var(--cream);
+        }
+
+        .btn-photo {
+            min-height: 48px;
+            background: var(--cream) !important;
+            color: var(--navy) !important;
+            border: 1.5px solid rgba(16, 35, 58, 0.15) !important;
+            font-weight: 700;
+        }
+
+        .btn-gold {
+            min-height: 52px;
+            background: linear-gradient(180deg, #f8e7a8, #e2b03a) !important;
+            color: var(--navy) !important;
+            font-weight: 800;
+            border-radius: 14px;
+        }
+
+        .btn-sign-out {
+            width: 100%;
+            min-height: 48px;
+            padding: 12px 16px;
+            border-radius: 16px;
+            border: 1.5px solid rgba(246, 227, 164, 0.75);
+            background: transparent;
+            color: var(--cream);
+            font-weight: 800;
+        }
+
+        button:focus-visible {
+            outline: 2px solid var(--gold-bright);
+            outline-offset: 2px;
         }
 
         .view-layer {
@@ -76,7 +762,7 @@
             z-index: 10;
             display: none !important;
             overflow-y: auto;
-            padding-top: var(--safe-area-top);
+            padding-top: 0;
             pointer-events: none;
         }
         .view-layer.active {
@@ -88,9 +774,27 @@
         }
         
         .view-layer-bg {
-            background-color: #000;
+            background-color: var(--gold);
+            background-image: linear-gradient(180deg, #f8e7a8 0%, #f0d36a 24%, #e4b43c 58%, #d09a1e 100%);
             z-index: 15;
             pointer-events: auto;
+        }
+
+        .view-layer-bg::before {
+            content: "";
+            position: absolute;
+            left: -4%;
+            right: -4%;
+            bottom: 0;
+            height: 168px;
+            background: url("assets/mountains.svg") center bottom / 100% 100% no-repeat;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .view-layer-bg > * {
+            position: relative;
+            z-index: 1;
         }
 
         ::-webkit-scrollbar {
@@ -98,30 +802,56 @@
         }
         
         .leaflet-popup-content-wrapper {
-            background: rgba(30, 30, 30, 0.95) !important;
-            backdrop-filter: blur(12px);
-            color: white !important;
+            background: var(--navy) !important;
+            color: var(--cream) !important;
             border-radius: 14px !important;
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(226, 176, 58, 0.45);
         }
         .leaflet-popup-tip {
-            background: rgba(30, 30, 30, 0.95) !important;
+            background: var(--navy) !important;
+        }
+        .popup-kicker {
+            color: var(--gold-bright);
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 4px;
         }
 
         #ios-alert-overlay {
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(16, 24, 32, 0.46);
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
             z-index: 99999;
             display: none;
         }
         .ios-alert-box {
-            background: rgba(40, 40, 40, 0.95);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-radius: 14px;
-            width: 270px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            background: linear-gradient(180deg, #1c4468, #10233a);
+            border: 1px solid rgba(226, 176, 58, 0.5);
+            border-radius: 18px;
+            width: min(300px, calc(100vw - 48px));
+            box-shadow: 0 20px 40px rgba(16, 24, 32, 0.45);
+            color: var(--cream);
+        }
+        #ios-alert-title {
+            color: var(--cream);
+            font-family: "Noto Serif TC", serif;
+        }
+        #ios-alert-message {
+            color: #f3e6c0;
+        }
+        #ios-alert-buttons button {
+            min-height: 48px;
+        }
+        .alert-destructive { color: #ffc1bc; font-weight: 600; }
+        .alert-cancel { color: var(--cream); font-weight: 800; }
+        .alert-default { color: var(--gold-bright); font-weight: 800; }
+        #ios-alert-buttons button:active { background: rgba(255, 255, 255, 0.08); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .animate-pulse { animation: none !important; }
         }
     </style>
 </head>
@@ -135,17 +865,36 @@
         <button onclick="map.zoomOut()" class="w-11 h-11 glass-card rounded-2xl flex items-center justify-center text-white active:scale-95 shadow-lg"><i class="fa-solid fa-minus text-sm"></i></button>
     </div>
 
-    <!-- View: Map -->
-    <div id="view-map" class="view-layer flex-col pt-12 px-4 items-center">
-        <div class="glass-card px-5 py-2.5 rounded-full flex items-center space-x-3 shadow-lg pointer-auto">
-            <div class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-            <span id="map-peaks-remaining" class="text-[15px] font-semibold text-white tracking-wide">Calculating...</span>
+    <!-- View: Map (home) -->
+    <div id="view-map" class="view-layer flex-col px-4 items-center home-stack">
+        <div class="home-brand pointer-auto">
+            <img src="assets/hk100-seal.png" alt="香港百登" class="home-seal" width="48" height="48">
+            <div>
+                <p class="home-zh">香港百登</p>
+                <p class="home-en">Personal tracker</p>
+            </div>
+        </div>
+        <div class="home-status pointer-auto">
+            <div class="status-dot"></div>
+            <span id="map-peaks-remaining">Calculating...</span>
         </div>
     </div>
 
     <!-- View: Record -->
-    <div id="view-record" class="view-layer view-layer-bg flex-col justify-end pb-6 px-4">
-        <div class="glass-card rounded-[32px] p-6 shadow-2xl relative overflow-hidden pointer-auto">
+    <div id="view-record" class="view-layer view-layer-bg flex-col">
+        <header class="brand-header">
+            <div class="brand-lockup">
+                <img src="assets/hk100-seal.png" alt="" class="brand-seal" width="52" height="52">
+                <div>
+                    <p class="brand-zh">香港百登</p>
+                    <h1>Record</h1>
+                    <p class="brand-personal">Personal tracker</p>
+                </div>
+            </div>
+        </header>
+        <div class="record-stage">
+            <img src="assets/hk100-seal.png" alt="" class="record-watermark">
+        <div class="record-card pointer-auto">
             <div id="recording-indicator" class="absolute top-6 right-6 flex items-center space-x-2 hidden">
                 <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
                 <span class="text-xs font-semibold text-red-500 uppercase tracking-wider">Rec</span>
@@ -160,7 +909,7 @@
                         <i class="fa-solid fa-cloud-sun"></i> <span>Fetching weather...</span>
                     </div>
                     <div id="location-display" class="inline-flex items-center space-x-1.5 bg-white/10 px-3 py-1 rounded-full text-xs font-medium text-gray-300">
-                        <i class="fa-solid fa-location-crosshairs text-[#0A84FF]"></i> <span id="location-text">Acquiring GPS...</span>
+                        <i class="fa-solid fa-location-crosshairs" style="color:#f6e3a4"></i> <span id="location-text">Acquiring GPS...</span>
                     </div>
                 </div>
             </div>
@@ -177,13 +926,13 @@
             </div>
             
             <div class="flex justify-center space-x-4">
-                <button id="btn-start" onclick="startTracking()" class="w-20 h-20 bg-[#0A84FF] rounded-full flex justify-center items-center shadow-[0_0_20px_rgba(10,132,255,0.4)] active:scale-95 transition-transform">
+                <button id="btn-start" onclick="startTracking()" class="w-20 h-20 rounded-full flex justify-center items-center active:scale-95 transition-transform">
                     <i class="fa-solid fa-play text-2xl text-white ml-1"></i>
                 </button>
                 <button id="btn-pause" onclick="pauseTracking()" class="hidden w-20 h-20 bg-yellow-500 rounded-full flex justify-center items-center shadow-[0_0_20px_rgba(234,179,8,0.4)] active:scale-95 transition-transform">
                     <i class="fa-solid fa-pause text-2xl text-white"></i>
                 </button>
-                <button id="btn-resume" onclick="resumeTracking()" class="hidden w-20 h-20 bg-[#0A84FF] rounded-full flex justify-center items-center shadow-[0_0_20px_rgba(10,132,255,0.4)] active:scale-95 transition-transform">
+                <button id="btn-resume" onclick="resumeTracking()" class="hidden w-20 h-20 rounded-full flex justify-center items-center active:scale-95 transition-transform">
                     <i class="fa-solid fa-play text-2xl text-white ml-1"></i>
                 </button>
                 <button id="btn-stop" onclick="stopTracking()" class="hidden w-20 h-20 bg-red-500 rounded-full flex justify-center items-center shadow-[0_0_20px_rgba(239,68,68,0.4)] active:scale-95 transition-transform">
@@ -191,42 +940,51 @@
                 </button>
             </div>
         </div>
+        </div>
     </div>
 
-    <!-- View: Schedule (31-Week Official Schedule matching your screenshot) -->
+    <!-- View: Schedule -->
     <div id="view-schedule" class="view-layer view-layer-bg flex-col">
-        <div class="sticky top-0 z-20 glass-panel px-6 pt-10 pb-4 flex justify-between items-end border-b border-white/10">
-            <div>
-                <h1 class="text-3xl font-bold tracking-tight text-white mb-1">Schedule</h1>
-                <p class="text-gray-400 text-sm font-medium">HK 31-Week Challenge (100 Peaks)</p>
-            </div>
-            <div class="text-right">
-                <p id="scheduleProgressText" class="text-[#0A84FF] font-bold text-lg">0/100 Peaks</p>
-            </div>
-        </div>
-        
-        <div id="schedule-list" class="pb-32 pt-4 space-y-4 pointer-auto">
-            <!-- Schedule cards injected by JS -->
-        </div>
-
-        <div class="fixed bottom-24 right-4 z-30 pointer-events-none">
-            <div class="glass-card rounded-full p-2 shadow-2xl flex items-center justify-center relative">
-                <svg width="60" height="60" class="transform -rotate-90">
-                    <circle cx="30" cy="30" r="26" stroke="rgba(255,255,255,0.1)" stroke-width="6" fill="none"></circle>
-                    <circle id="progressRingSvg" cx="30" cy="30" r="26" stroke="#0A84FF" stroke-width="6" fill="none" stroke-dasharray="163.36" stroke-dashoffset="163.36" stroke-linecap="round" class="transition-all duration-500 ease-in-out"></circle>
-                </svg>
-                <div class="absolute inset-0 flex items-center justify-center flex-col">
-                    <span id="progressRingPercent" class="text-xs font-bold text-white">0%</span>
+        <header class="brand-header">
+            <div class="brand-lockup">
+                <img src="assets/hk100-seal.png" alt="" class="brand-seal" width="52" height="52">
+                <div>
+                    <p class="brand-zh">香港百登</p>
+                    <h1>Schedule</h1>
+                    <p class="brand-personal">Personal tracker</p>
                 </div>
             </div>
+            <div class="brand-progress">
+                <div class="progress-fab" aria-hidden="true">
+                    <svg width="48" height="48" class="transform -rotate-90">
+                        <circle cx="24" cy="24" r="20" stroke="rgba(255,248,220,0.18)" stroke-width="4.5" fill="none"></circle>
+                        <circle id="progressRingSvg" cx="24" cy="24" r="20" stroke="#f6e3a4" stroke-width="4.5" fill="none" stroke-dasharray="125.66" stroke-dashoffset="125.66" stroke-linecap="round"></circle>
+                    </svg>
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <span id="progressRingPercent" class="text-[10px] font-bold text-white">0%</span>
+                    </div>
+                </div>
+                <p id="scheduleProgressText">0/100 Peaks</p>
+            </div>
+        </header>
+        
+        <div id="schedule-list" class="pb-24 pt-4 space-y-4 pointer-auto">
+            <!-- Schedule cards injected by JS -->
         </div>
     </div>
 
     <!-- View: History -->
     <div id="view-history" class="view-layer view-layer-bg flex-col">
-        <div class="px-6 pt-10 pb-4 sticky top-0 glass-panel z-20 border-b border-white/10 flex justify-between items-center">
-            <h1 class="text-3xl font-bold tracking-tight">History</h1>
-        </div>
+        <header class="brand-header">
+            <div class="brand-lockup">
+                <img src="assets/hk100-seal.png" alt="" class="brand-seal" width="52" height="52">
+                <div>
+                    <p class="brand-zh">香港百登</p>
+                    <h1>History</h1>
+                    <p class="brand-personal">Personal tracker</p>
+                </div>
+            </div>
+        </header>
         <div id="history-list" class="p-4 space-y-4 pb-24 pointer-auto">
             <!-- History items injected by JS -->
         </div>
@@ -234,15 +992,22 @@
 
     <!-- View: Profile -->
     <div id="view-profile" class="view-layer view-layer-bg flex-col">
-        <div class="px-6 pt-10 pb-4 sticky top-0 glass-panel z-20 border-b border-white/10">
-            <h1 class="text-3xl font-bold tracking-tight">Profile</h1>
-        </div>
-        <div class="p-6 space-y-6 pb-28 pointer-auto">
+        <header class="brand-header">
+            <div class="brand-lockup">
+                <img src="assets/hk100-seal.png" alt="" class="brand-seal" width="52" height="52">
+                <div>
+                    <p class="brand-zh">香港百登</p>
+                    <h1>Profile</h1>
+                    <p class="brand-personal">Personal tracker</p>
+                </div>
+            </div>
+        </header>
+        <div class="px-4 pt-4 pb-8 space-y-3 pointer-auto">
             <div class="glass-card rounded-3xl p-6">
                 <h2 class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-4">Account & Cloud Sync</h2>
                 <div id="account-status-container" class="flex flex-col space-y-4">
                     <div class="flex items-center space-x-3">
-                        <div id="user-avatar-icon" class="w-12 h-12 rounded-full bg-[#0A84FF]/20 border border-[#0A84FF]/40 flex items-center justify-center text-[#0A84FF] text-xl font-bold overflow-hidden">
+                        <div id="user-avatar-icon" class="w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold overflow-hidden">
                             <img id="user-avatar-image" alt="" class="hidden w-full h-full object-cover">
                             <i id="user-avatar-fallback" class="fa-solid fa-user"></i>
                         </div>
@@ -276,25 +1041,27 @@
 
             <div class="glass-card rounded-3xl p-6">
                 <h2 class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-4">Awards</h2>
-                <div class="flex items-center space-x-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                    <div id="hk100BadgeIcon" class="w-16 h-16 rounded-full bg-gray-800 border-2 border-gray-600 flex items-center justify-center shrink-0 transition-all duration-500">
-                        <i class="fa-solid fa-mountain text-gray-500 text-2xl"></i>
+                <div class="award-row">
+                    <div id="hk100BadgeIcon" class="award-seal">
+                        <img src="assets/hk100-seal.png" alt="">
                     </div>
                     <div>
-                        <h3 class="font-bold text-lg leading-tight text-white">HONG KONG 100 Done</h3>
-                        <p class="text-xs text-gray-400 mt-1">Complete all 100 peaks.</p>
-                        <div class="mt-2 text-xs font-bold text-[#0A84FF] bg-[#0A84FF]/20 inline-block px-2.5 py-1 rounded-md">
+                        <h3 class="font-bold text-lg leading-tight text-white">Hong Kong 100 Done</h3>
+                        <p class="text-xs text-gray-400 mt-1">Your count toward all 100 peaks.</p>
+                        <div class="award-count">
                             <span id="hk100BadgeCount">0 / 100</span> Peaks
                         </div>
                     </div>
                 </div>
             </div>
+
+            <p class="fan-note">A personal log for your own Hong Kong Hundred Done hikes. Not an official Life Fever product.</p>
         </div>
     </div>
 
     <!-- Edit Hike Modal with Week Dropdown Selector -->
     <div id="edit-modal" class="fixed inset-0 z-[9999] hidden items-end justify-center bg-black/60 backdrop-blur-sm transition-opacity">
-        <div class="bg-[#1c1c1e] w-full max-w-md rounded-t-[32px] p-6 pb-12 transform transition-transform border-t border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto pointer-auto">
+        <div class="sheet w-full max-w-md rounded-t-[32px] p-6 pb-12 transform transition-transform shadow-2xl max-h-[90vh] overflow-y-auto pointer-auto">
             <div class="flex justify-between items-center mb-6">
                 <h3 class="text-xl font-bold text-white">Edit Hike Details</h3>
                 <button onclick="closeEditModal()" class="text-gray-400 hover:text-white bg-white/10 rounded-full w-8 h-8 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
@@ -303,25 +1070,25 @@
             <div class="space-y-5">
                 <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Route Name</label>
-                    <input type="text" id="edit-route-name" class="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#0A84FF] text-sm" placeholder="Hike Route Name">
+                    <input type="text" id="edit-route-name" class="w-full rounded-xl p-3 text-sm" placeholder="Hike Route Name">
                 </div>
 
                 <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Link to HK 31-Week Schedule (Completes Peaks)</label>
-                    <select id="edit-week-select" class="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#0A84FF] text-sm">
+                    <select id="edit-week-select" class="w-full rounded-xl p-3 text-sm">
                         <option value="">-- None (Free Hike) --</option>
                     </select>
                 </div>
 
                 <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Notes & Comments</label>
-                    <textarea id="edit-comment" rows="3" class="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#0A84FF] text-sm" placeholder="How was the trail? Any challenges?"></textarea>
+                    <textarea id="edit-comment" rows="3" class="w-full rounded-xl p-3 text-sm" placeholder="How was the trail? Any challenges?"></textarea>
                 </div>
                 
                 <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Trail Photo</label>
                     <input type="file" id="edit-photo-input" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
-                    <button onclick="document.getElementById('edit-photo-input').click()" class="w-full py-3.5 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl text-[#0A84FF] font-semibold flex items-center justify-center space-x-2 transition-colors">
+                    <button onclick="document.getElementById('edit-photo-input').click()" class="btn-photo w-full py-3.5 rounded-xl flex items-center justify-center space-x-2">
                         <i class="fa-solid fa-camera"></i> <span>Choose Photo</span>
                     </button>
                     
@@ -331,13 +1098,13 @@
                     </div>
                 </div>
                 
-                <button onclick="saveEdit()" class="w-full py-4 bg-[#0A84FF] text-white font-bold rounded-xl mt-2 active:scale-[0.98] transition-transform">Save Updates</button>
+                <button onclick="saveEdit()" class="btn-gold w-full py-4 mt-2 active:scale-[0.98] transition-transform">Save Updates</button>
             </div>
         </div>
     </div>
 
     <!-- Bottom Tab Navigation Bar -->
-    <div class="glass-panel tab-bar fixed bottom-0 left-0 w-full flex justify-around items-center">
+    <div class="tab-bar fixed bottom-0 left-0 w-full flex justify-around items-center">
         <button onclick="switchTab('map')" class="flex flex-col items-center p-2 w-16 group" id="tab-btn-map">
             <i class="fa-solid fa-map text-xl mb-1 tab-icon tab-active group-active:scale-90" id="tab-icon-map"></i>
             <span class="text-[10px] font-medium tab-icon tab-active" id="tab-text-map">Map</span>
@@ -660,7 +1427,7 @@
             
             buttons.forEach((btn, index) => {
                 const btnEl = document.createElement('button');
-                const tone = btn.style === 'destructive' ? 'text-red-500 font-normal' : (btn.style === 'cancel' ? 'text-[#0A84FF] font-semibold' : 'text-[#0A84FF] font-normal');
+                const tone = btn.style === 'destructive' ? 'alert-destructive' : (btn.style === 'cancel' ? 'alert-cancel' : 'alert-default');
                 const edge = stacked ? (index === 0 ? '' : 'border-t border-white/10') : (index === 0 ? 'flex-1' : 'flex-1 border-l border-white/10');
                 btnEl.className = `py-3.5 text-[17px] active:bg-white/10 transition-colors ${edge} ${tone}`;
                 btnEl.innerText = btn.text;
@@ -714,8 +1481,8 @@
                 subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
             }).addTo(map);
 
-            trackLayer = L.polyline([], { color: '#0A84FF', weight: 6, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }).addTo(map);
-            historyRouteLayer = L.polyline([], { color: '#34C759', weight: 6, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+            trackLayer = L.polyline([], { color: '#c81018', weight: 6, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+            historyRouteLayer = L.polyline([], { color: '#10233a', weight: 6, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
             updateMapPins(); 
         }
 
@@ -728,8 +1495,9 @@
                 const weekItem = hk100Data.find(w => w.id === peak.weekId);
                 const isDone = weekItem ? completedChallenges[weekItem.id] === true : false;
                 
-                const pinColor = isDone ? '#34C759' : '#0A84FF';
+                const pinColor = isDone ? '#e2b03a' : '#10233a';
                 const pinIcon = isDone ? 'fa-check' : 'fa-mountain';
+                const pinInk = isDone ? '#10233a' : '#fffaf0';
                 
                 const iconHtml = `
                     <div style="
@@ -738,13 +1506,13 @@
                         height: 28px; 
                         border-radius: 50% 50% 50% 0; 
                         transform: rotate(-45deg); 
-                        border: 2px solid white; 
+                        border: 2px solid ${pinInk}; 
                         box-shadow: 0 4px 6px rgba(0,0,0,0.5);
                         display: flex;
                         align-items: center;
                         justify-content: center;
                     ">
-                        <i class="fa-solid ${pinIcon}" style="color: white; font-size: 11px; transform: rotate(45deg);"></i>
+                        <i class="fa-solid ${pinIcon}" style="color: ${pinInk}; font-size: 11px; transform: rotate(45deg);"></i>
                     </div>
                 `;
                 
@@ -760,7 +1528,7 @@
                 
                 marker.bindPopup(`
                     <div class="p-2 min-w-[180px]">
-                        <span class="text-[9px] font-bold text-[#0A84FF] uppercase tracking-wider block mb-1">${weekItem?.week || ''} • ${weekItem?.district || ''}</span>
+                        <span class="popup-kicker">${weekItem?.week || ''} • ${weekItem?.district || ''}</span>
                         <b class="block text-[15px] leading-tight text-white mb-1 font-extrabold">${peak.name}</b>
                         <span class="text-[11px] text-gray-400 block"><i class="fa-solid fa-arrow-up-right-dots mr-1"></i> ${peak.elev}</span>
                     </div>
@@ -792,7 +1560,7 @@
             if (!currentPositionMarker) {
                 currentPositionMarker = L.marker(latLng, {
                     icon: L.divIcon({
-                        html: '<div class="w-5 h-5 bg-[#0A84FF] rounded-full border-4 border-white shadow-md"></div>',
+                        html: '<div class="w-5 h-5 rounded-full border-4 border-white shadow-md" style="background:#c81018"></div>',
                         className: 'current-pos-icon',
                         iconSize: [20, 20],
                         iconAnchor: [10, 10]
@@ -952,36 +1720,24 @@
                 const compDate = completionDates[item.id] || '';
                 
                 const card = document.createElement('div');
-                card.className = `glass-card p-4 mx-4 rounded-[20px] flex flex-col justify-between border ${isDone ? 'border-green-500/50 bg-[#34C759]/10' : 'border-white/5 bg-white/5'}`;
+                card.className = `peak-card${isDone ? ' is-done' : ''}`;
                 
                 card.innerHTML = `
-                    <div class="flex justify-between items-start mb-3">
-                        <div class="flex items-center space-x-2">
-                            <span class="text-[10px] font-bold px-2 py-1 rounded bg-black/40 text-gray-300 ${isDone ? 'bg-[#34C759]/30 text-green-300' : ''}">${item.week}</span>
-                            <span class="text-xs font-semibold text-white/90">${item.district}</span>
+                    <div class="peak-top">
+                        <div class="peak-meta">
+                            <span class="peak-week">${escapeHtml(item.week)}</span>
+                            <span class="peak-district">${escapeHtml(item.district)}</span>
                         </div>
-                        <div class="flex items-center space-x-3">
-                            <span class="text-[10px] font-bold text-gray-400 bg-black/30 px-2 py-1 rounded-full border border-white/5">
-                                <i class="fa-solid fa-flag text-gray-500 mr-1 text-[8px]"></i>${item.peakCount} Peaks
-                            </span>
-                            <div class="w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors ${isDone ? 'border-[#34C759] bg-[#34C759]' : 'border-gray-500'}">
-                                ${isDone ? '<i class="fa-solid fa-check text-white text-[10px]"></i>' : ''}
-                            </div>
+                        <div class="peak-count">
+                            <span><i class="fa-solid fa-flag"></i>${item.peakCount} Peaks</span>
+                            <span class="peak-check">${isDone ? '<i class="fa-solid fa-check"></i>' : ''}</span>
                         </div>
                     </div>
-                    <h3 class="font-bold text-white text-[15px] leading-tight mb-2 ${isDone ? 'line-through text-gray-400' : ''}">${item.peaks}</h3>
-                    
-                    ${isDone && compDate ? `<div class="mb-2 text-[11px] text-[#34C759] font-medium"><i class="fa-solid fa-calendar-check mr-1"></i> Completed on ${compDate}</div>` : ''}
-
-                    <div class="grid grid-cols-2 gap-2 text-[11px] text-gray-400 bg-black/20 p-2 rounded-xl">
-                        <div class="flex items-start">
-                            <i class="fa-solid fa-mountain text-gray-500 mr-1.5 mt-0.5 w-3"></i> 
-                            <span class="leading-tight">${item.diff}</span>
-                        </div>
-                        <div class="flex items-start">
-                            <i class="fa-solid fa-clock text-gray-500 mr-1.5 mt-0.5 w-3"></i> 
-                            <span>${item.time}</span>
-                        </div>
+                    <h3 class="peak-names">${escapeHtml(item.peaks)}</h3>
+                    ${isDone && compDate ? `<div class="peak-done-date"><i class="fa-solid fa-calendar-check"></i> Completed on ${escapeHtml(compDate)}</div>` : ''}
+                    <div class="peak-facts">
+                        <span><i class="fa-solid fa-mountain"></i>${escapeHtml(item.diff)}</span>
+                        <span><i class="fa-solid fa-clock"></i>${escapeHtml(item.time)}</span>
                     </div>
                 `;
                 container.appendChild(card);
@@ -1014,7 +1770,7 @@
             
             const circle = document.getElementById('progressRingSvg');
             if (circle) {
-                const circumference = 163.36;
+                const circumference = 125.66;
                 const offset = circumference - (percentage / 100) * circumference;
                 circle.style.strokeDashoffset = offset;
             }
@@ -1026,7 +1782,7 @@
             container.innerHTML = '';
             
             if (hikeHistory.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-center mt-10">No hikes recorded yet.</p>';
+                container.innerHTML = '<p class="history-empty">No hikes recorded yet.</p>';
                 return;
             }
             
@@ -1035,57 +1791,57 @@
                 const m = Math.floor(safeDuration / 60);
                 const s = safeDuration % 60;
                 const photoSrc = safeImageSrc(hike.photo);
-                const commentHtml = hike.comment ? `<p class="text-sm text-gray-300 mt-2 border-l-2 border-[#0A84FF] pl-3 italic">"${escapeHtml(hike.comment)}"</p>` : '';
-                const photoHtml = photoSrc ? `<img src="${photoSrc}" class="w-full h-40 object-cover rounded-xl mt-3 border border-white/5 shadow-md" alt="">` : '';
-                const weatherHtml = hike.weather && hike.weather !== "--" ? `<span class="text-[10px] text-gray-400 bg-white/10 px-2 py-0.5 rounded-md"><i class="fa-solid fa-cloud-sun"></i> ${escapeHtml(hike.weather)}</span>` : '';
+                const commentHtml = hike.comment ? `<p class="hike-comment">"${escapeHtml(hike.comment)}"</p>` : '';
+                const photoHtml = photoSrc ? `<img src="${photoSrc}" class="hike-photo" alt="">` : '';
+                const weatherHtml = hike.weather && hike.weather !== "--" ? `<span class="hike-weather"><i class="fa-solid fa-cloud-sun"></i> ${escapeHtml(hike.weather)}</span>` : '';
                 
                 let peakInfoHtml = '';
                 if (hike.weekId) {
                     const matchedWeek = hk100Data.find(w => w.id == hike.weekId);
                     if (matchedWeek) {
                         peakInfoHtml = `
-                            <div class="mt-2 bg-[#0A84FF]/10 border border-[#0A84FF]/30 p-2.5 rounded-xl">
-                                <span class="text-[10px] font-bold text-[#0A84FF] uppercase tracking-wider block">${escapeHtml(matchedWeek.week)} • Completed Peaks</span>
-                                <p class="text-sm font-bold text-white mt-0.5">${escapeHtml(matchedWeek.peaks)}</p>
+                            <div class="hike-peaks">
+                                <span>${escapeHtml(matchedWeek.week)} · Completed peaks</span>
+                                <p>${escapeHtml(matchedWeek.peaks)}</p>
                             </div>
                         `;
                     }
                 }
 
                 const trackNote = typeof window.hikeTrackNote === 'function' ? window.hikeTrackNote(hike) : '';
-                const trackNoteHtml = trackNote ? `<p class="text-[11px] text-gray-500 mt-3">${escapeHtml(trackNote)}</p>` : '';
+                const trackNoteHtml = trackNote ? `<p class="hike-note">${escapeHtml(trackNote)}</p>` : '';
                 const card = document.createElement('div');
-                card.className = "glass-card p-5 rounded-3xl relative";
+                card.className = "hike-card";
                 card.innerHTML = `
-                    <div class="flex justify-between items-start mb-2">
+                    <div class="hike-top">
                         <div>
-                            <h3 class="font-bold text-lg text-white mb-1">${escapeHtml(hike.name || "Hike Route")}</h3>
-                            <div class="flex items-center space-x-2">
-                                <p class="text-[11px] text-gray-400 uppercase tracking-wider">${escapeHtml(hike.date)}</p>
+                            <h3>${escapeHtml(hike.name || "Hike Route")}</h3>
+                            <div class="hike-date">
+                                <span>${escapeHtml(hike.date)}</span>
                                 ${weatherHtml}
                             </div>
                         </div>
-                        <div class="text-right">
-                            <p class="font-bold text-2xl text-white">${escapeHtml(hike.distance)} <span class="text-xs font-normal text-gray-400">km</span></p>
-                            <p class="font-semibold text-[#0A84FF] text-sm mt-0.5">${m}m ${s}s</p>
+                        <div>
+                            <p class="hike-distance">${escapeHtml(hike.distance)} <span>km</span></p>
+                            <p class="hike-duration">${m}m ${s}s</p>
                         </div>
                     </div>
                     ${peakInfoHtml}
                     ${commentHtml}
                     ${photoHtml}
                     ${trackNoteHtml}
-                    <div class="flex flex-wrap justify-end gap-2 mt-4 pt-3 border-t border-white/5">
-                        <button type="button" data-hike-action="gpx" data-hike-id="${escapeHtml(hike.id)}" class="bg-white/10 text-white text-[12px] px-3.5 py-1.5 rounded-full hover:bg-white/20 active:scale-95 transition-all flex items-center space-x-1">
-                            <i class="fa-solid fa-file-arrow-down text-[10px]"></i> <span>Download GPX</span>
+                    <div class="hike-actions">
+                        <button type="button" data-hike-action="gpx" data-hike-id="${escapeHtml(hike.id)}" class="hike-action">
+                            <i class="fa-solid fa-file-arrow-down"></i> <span>Download GPX</span>
                         </button>
-                        <button type="button" data-hike-action="view" data-hike-id="${escapeHtml(hike.id)}" class="bg-[#0A84FF]/20 text-[#0A84FF] text-[12px] px-3.5 py-1.5 rounded-full hover:bg-[#0A84FF]/30 active:scale-95 transition-all flex items-center space-x-1">
-                            <i class="fa-solid fa-map-location-dot text-[10px]"></i> <span>View</span>
+                        <button type="button" data-hike-action="view" data-hike-id="${escapeHtml(hike.id)}" class="hike-action hike-action-view">
+                            <i class="fa-solid fa-map-location-dot"></i> <span>View</span>
                         </button>
-                        <button type="button" data-hike-action="edit" data-hike-id="${escapeHtml(hike.id)}" class="bg-white/10 text-white text-[12px] px-3.5 py-1.5 rounded-full hover:bg-white/20 active:scale-95 transition-all flex items-center space-x-1">
-                            <i class="fa-solid fa-pen text-[10px]"></i> <span>Edit</span>
+                        <button type="button" data-hike-action="edit" data-hike-id="${escapeHtml(hike.id)}" class="hike-action">
+                            <i class="fa-solid fa-pen"></i> <span>Edit</span>
                         </button>
-                        <button type="button" data-hike-action="delete" data-hike-id="${escapeHtml(hike.id)}" class="bg-red-500/20 text-red-400 text-[12px] px-3.5 py-1.5 rounded-full hover:bg-red-500/30 active:scale-95 transition-all flex items-center space-x-1">
-                            <i class="fa-solid fa-trash text-[10px]"></i> <span>Delete</span>
+                        <button type="button" data-hike-action="delete" data-hike-id="${escapeHtml(hike.id)}" class="hike-action hike-action-danger">
+                            <i class="fa-solid fa-trash"></i> <span>Delete</span>
                         </button>
                     </div>
                 `;
@@ -1279,18 +2035,7 @@
 
             document.getElementById('hk100BadgeCount').innerText = `${completedPeaks} / 100`;
             const badgeIcon = document.getElementById('hk100BadgeIcon');
-            const badgeMark = badgeIcon.querySelector('i');
-            if (completedPeaks >= 100) {
-                badgeIcon.classList.remove('bg-gray-800', 'border-gray-600');
-                badgeIcon.classList.add('bg-[#34C759]', 'border-green-400');
-                badgeMark.classList.remove('text-gray-500');
-                badgeMark.classList.add('text-white');
-            } else {
-                badgeIcon.classList.remove('bg-[#34C759]', 'border-green-400');
-                badgeIcon.classList.add('bg-gray-800', 'border-gray-600');
-                badgeMark.classList.remove('text-white');
-                badgeMark.classList.add('text-gray-500');
-            }
+            if (badgeIcon) badgeIcon.classList.toggle('is-complete', completedPeaks >= 100);
         }
 
         window.switchTab = function(tabId) {

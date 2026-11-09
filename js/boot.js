@@ -141,7 +141,7 @@ function accountButton(label, google, onClick, disabled) {
     button.id = google ? "btn-google-sign-in" : "btn-sign-out";
     button.className = google
         ? "w-full py-3.5 bg-white text-black font-bold rounded-2xl flex items-center justify-center space-x-2 active:scale-[0.98] transition-all shadow-lg disabled:opacity-60"
-        : "w-full py-3.5 bg-white/10 text-white font-bold rounded-2xl flex items-center justify-center space-x-2 active:scale-[0.98] transition-all";
+        : "btn-sign-out active:scale-[0.98] transition-all";
     if (google) {
         const icon = document.createElement("i");
         icon.className = "fa-brands fa-google text-red-500";
