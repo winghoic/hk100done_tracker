@@ -70,6 +70,8 @@ Popup sign-in is the normal path. If the browser blocks the popup, the app conti
 - **Google account chooser closes immediately, or only some accounts work:** the OAuth consent screen is likely still in Testing. Add that Google account as a test user.
 - **Saved on this device / cloud save was denied:** publish `firestore.rules`. A missing network leaves the same on-device copy and retries when the browser is back online.
 
-## Strava and GPX
+## GPX download
 
-Hike export is separate from Google sign-in. See `docs/STRAVA.md`.
+Saved hikes with a GPS track can be downloaded as GPX from History, and from the save prompt at the end of a recording. Each point is latitude, longitude, and a time. Times are spread from the start of the hike to the save time using the recorded duration. The file has no elevation. The route name and comment are escaped as XML text.
+
+A hike with no points shows **No GPS track for this hike** on the history card. Download explains that there is no GPX file. If cloud sync left the track behind (`pointsOmitted`), the card says the GPS track is not on this device.
