@@ -31,6 +31,13 @@
             --ink-soft: #5c4630;
             --mountain: #323940;
         }
+        html {
+            height: 100%;
+            height: 100dvh;
+            overflow: hidden;
+            background-color: var(--navy);
+        }
+
         body {
             font-family: "Noto Sans TC", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--gold-deep);
@@ -40,16 +47,29 @@
             overflow: hidden;
             margin: 0;
             padding: 0;
-            width: 100vw;
-            height: 100vh;
+            width: 100%;
+            height: 100%;
+            min-height: -webkit-fill-available;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Fills whatever space is left above the real tab bar, including after
+           rotation and iPhone safe-area changes. Percentage heights on the
+           viewport itself are short of the top inset, which left a gap. */
+        #app-stage {
+            position: relative;
+            flex: 1 1 auto;
+            min-height: 0;
+            width: 100%;
+            overflow: hidden;
         }
         
         #map {
-            width: 100%;
-            height: 100%;
             position: absolute;
-            top: 0;
-            left: 0;
+            inset: 0;
+            width: 100%;
+            height: auto;
             z-index: 1;
         }
 
@@ -80,6 +100,9 @@
         }
 
         .tab-bar {
+            position: relative;
+            flex: 0 0 auto;
+            width: 100%;
             padding-bottom: calc(12px + var(--safe-area-bottom));
             padding-top: 8px;
             z-index: 50;
@@ -247,7 +270,7 @@
             inset: 0;
             z-index: 0;
             width: 100%;
-            height: 100%;
+            height: auto;
             pointer-events: auto;
             background: #d7e4d4;
         }
@@ -806,10 +829,9 @@
 
         .view-layer {
             position: absolute;
-            top: 0;
-            left: 0;
+            inset: 0;
             width: 100%;
-            height: calc(100% - 75px - var(--safe-area-bottom));
+            height: auto;
             z-index: 10;
             display: none !important;
             overflow-y: auto;
@@ -908,6 +930,7 @@
 </head>
 <body>
 
+    <div id="app-stage">
     <div id="map"></div>
 
     <!-- Map Zoom Floating Controls -->
@@ -1110,6 +1133,7 @@
             <p class="fan-note">A personal log for your own Hong Kong Hundred Done hikes. Not an official Life Fever product.</p>
         </div>
     </div>
+    </div><!-- /app-stage -->
 
     <!-- Edit Hike Modal with Week Dropdown Selector -->
     <div id="edit-modal" class="fixed inset-0 z-[9999] hidden items-end justify-center bg-black/60 backdrop-blur-sm transition-opacity">
@@ -1156,7 +1180,7 @@
     </div>
 
     <!-- Bottom Tab Navigation Bar -->
-    <div class="tab-bar fixed bottom-0 left-0 w-full flex justify-around items-center">
+    <div class="tab-bar w-full flex justify-around items-center">
         <button onclick="switchTab('map')" class="flex flex-col items-center p-2 w-16 group" id="tab-btn-map">
             <i class="fa-solid fa-map text-xl mb-1 tab-icon tab-active group-active:scale-90" id="tab-icon-map"></i>
             <span class="text-[10px] font-medium tab-icon tab-active" id="tab-text-map">Map</span>
@@ -2169,6 +2193,41 @@
             if (badgeIcon) badgeIcon.classList.toggle('is-complete', completedPeaks >= 100);
         }
 
+        function refreshVisibleMap() {
+            if (map && activeTab === 'map') {
+                const el = map.getContainer();
+                if (el.offsetWidth && el.offsetHeight) map.invalidateSize();
+            }
+            if (activeTab === 'record') {
+                ensureRecordMap();
+                const el = recordMap && recordMap.getContainer();
+                if (el && el.offsetWidth && el.offsetHeight) {
+                    recordMap.invalidateSize();
+                    paintRecordTrack();
+                    frameRecordMap();
+                }
+            }
+        }
+
+        function watchStageSize() {
+            let frame = 0;
+            const schedule = () => {
+                if (frame) cancelAnimationFrame(frame);
+                frame = requestAnimationFrame(() => {
+                    frame = 0;
+                    refreshVisibleMap();
+                });
+            };
+            window.addEventListener('resize', schedule);
+            window.addEventListener('orientationchange', () => setTimeout(schedule, 250));
+            window.addEventListener('pageshow', schedule);
+            if (window.visualViewport) window.visualViewport.addEventListener('resize', schedule);
+            if (window.ResizeObserver) {
+                const stage = document.getElementById('app-stage');
+                if (stage) new ResizeObserver(schedule).observe(stage);
+            }
+        }
+
         window.switchTab = function(tabId) {
             activeTab = tabId;
             
@@ -2191,20 +2250,14 @@
             document.getElementById('tab-icon-' + tabId).classList.add('tab-active');
             document.getElementById('tab-text-' + tabId).classList.add('tab-active');
             
-            if ((tabId === 'map' || tabId === 'record') && map) {
-                setTimeout(() => {
-                    if (tabId === 'map') map.invalidateSize();
-                    if (tabId === 'record') {
-                        ensureRecordMap();
-                        paintRecordTrack();
-                        frameRecordMap();
-                    }
-                }, 50);
+            if (tabId === 'map' || tabId === 'record') {
+                setTimeout(refreshVisibleMap, 50);
             }
         };
 
         window.addEventListener('load', async function() {
             initMap();
+            watchStageSize();
             switchTab('map'); 
             
             fetchWeather(HK_CENTER[0], HK_CENTER[1]);
