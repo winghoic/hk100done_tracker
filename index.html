@@ -240,10 +240,55 @@
             height: 44px;
         }
 
-        #view-record::before {
-            top: 118px;
-            bottom: auto;
-            height: 220px;
+        #record-map {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: auto;
+            background: #d7e4d4;
+        }
+
+        .record-brand .home-en {
+            white-space: nowrap;
+        }
+
+        .record-brand {
+            position: absolute;
+            top: calc(10px + var(--safe-area-top));
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 3;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: calc(100% - 92px);
+            background: linear-gradient(180deg, rgba(255, 248, 226, 0.96), rgba(236, 196, 78, 0.94));
+            border-radius: 999px;
+            padding: 5px 14px 5px 5px;
+            border: 1px solid rgba(255, 255, 255, 0.55);
+            box-shadow: 0 10px 24px rgba(80, 48, 0, 0.28);
+        }
+
+        .record-zoom {
+            position: absolute;
+            top: calc(76px + var(--safe-area-top));
+            right: 12px;
+            z-index: 3;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .record-zoom button {
+            width: 44px;
+            height: 44px;
+            border-radius: 16px;
+            background: var(--navy);
+            color: var(--gold-bright);
+            border: 1px solid rgba(246, 213, 106, 0.5);
+            box-shadow: 0 8px 16px rgba(16, 35, 58, 0.28);
         }
 
         .record-stage {
@@ -251,31 +296,35 @@
             display: flex;
             flex-direction: column;
             justify-content: flex-end;
-            padding: 12px 16px 22px;
+            padding: 12px 16px 16px;
             position: relative;
+            z-index: 2;
             min-height: 0;
-        }
-
-        .record-watermark {
-            position: absolute;
-            top: 12px;
-            left: 50%;
-            width: 150px;
-            height: 150px;
-            transform: translateX(-50%);
-            opacity: 0.28;
             pointer-events: none;
         }
 
         .record-card {
             position: relative;
             z-index: 1;
-            border-radius: 32px;
-            padding: 24px;
+            border-radius: 28px;
+            padding: 16px 16px 14px;
             background: rgba(16, 35, 58, 0.94);
             color: var(--cream);
-            border: 1px solid rgba(226, 176, 58, 0.35);
+            border: 1px solid rgba(226, 176, 58, 0.45);
             box-shadow: 0 16px 40px rgba(16, 35, 58, 0.28);
+        }
+
+        #view-record #timer-display {
+            font-size: 44px;
+            line-height: 1;
+        }
+
+        #view-record .record-card .mb-6 {
+            margin-bottom: 10px;
+        }
+
+        #view-record .record-card .mb-8 {
+            margin-bottom: 14px;
         }
 
         .record-card .text-gray-400,
@@ -881,19 +930,20 @@
     </div>
 
     <!-- View: Record -->
-    <div id="view-record" class="view-layer view-layer-bg flex-col">
-        <header class="brand-header">
-            <div class="brand-lockup">
-                <img src="assets/hk100-seal.png" alt="" class="brand-seal" width="52" height="52">
-                <div>
-                    <p class="brand-zh">香港百登</p>
-                    <h1>Record</h1>
-                    <p class="brand-personal">Personal tracker</p>
-                </div>
+    <div id="view-record" class="view-layer flex-col">
+        <div id="record-map"></div>
+        <div class="record-brand pointer-auto">
+            <img src="assets/hk100-seal.png" alt="香港百登" class="home-seal" width="48" height="48">
+            <div>
+                <p class="home-zh">香港百登</p>
+                <p class="home-en">Record</p>
             </div>
-        </header>
+        </div>
+        <div class="record-zoom pointer-auto">
+            <button type="button" id="record-zoom-in" aria-label="Zoom in"><i class="fa-solid fa-plus text-sm"></i></button>
+            <button type="button" id="record-zoom-out" aria-label="Zoom out"><i class="fa-solid fa-minus text-sm"></i></button>
+        </div>
         <div class="record-stage">
-            <img src="assets/hk100-seal.png" alt="" class="record-watermark">
         <div class="record-card pointer-auto">
             <div id="recording-indicator" class="absolute top-6 right-6 flex items-center space-x-2 hidden">
                 <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
@@ -1285,9 +1335,15 @@
         ];
 
         let map;
+        let recordMap;
         let trackLayer;
+        let recordTrack;
+        let recordTrackHalo;
         let historyRouteLayer;
         let currentPositionMarker;
+        let recordPosMarker;
+        let lastFix = null;
+        let recordIdleFramed = false;
         let hk100Markers = [];
         
         let positions = [];
@@ -1470,20 +1526,88 @@
             }
         }
 
+        function addTerrainTiles(target) {
+            L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+            }).addTo(target);
+        }
+
+        function hikerIcon() {
+            return L.divIcon({
+                html: '<div class="w-5 h-5 rounded-full border-4 border-white shadow-md" style="background:#c81018"></div>',
+                className: 'current-pos-icon',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+        }
+
         function initMap() {
             map = L.map('map', {
                 zoomControl: false,
                 attributionControl: false
             }).setView(HK_CENTER, 11);
             
-            L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
-                maxZoom: 20,
-                subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
-            }).addTo(map);
+            addTerrainTiles(map);
 
             trackLayer = L.polyline([], { color: '#c81018', weight: 6, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
             historyRouteLayer = L.polyline([], { color: '#10233a', weight: 6, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
-            updateMapPins(); 
+            updateMapPins();
+            window.map = map;
+        }
+
+        function ensureRecordMap() {
+            if (recordMap) {
+                recordMap.invalidateSize();
+                return;
+            }
+            const start = lastFix || HK_CENTER;
+            recordMap = L.map('record-map', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView(start, lastFix ? 16 : 12);
+            addTerrainTiles(recordMap);
+            recordTrackHalo = L.polyline([], { color: '#fffaf0', weight: 10, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(recordMap);
+            recordTrack = L.polyline([], { color: '#c81018', weight: 6, opacity: 1, lineCap: 'round', lineJoin: 'round' }).addTo(recordMap);
+            document.getElementById('record-zoom-in').addEventListener('click', () => recordMap.zoomIn());
+            document.getElementById('record-zoom-out').addEventListener('click', () => recordMap.zoomOut());
+            window.map = map;
+            recordMap.invalidateSize();
+        }
+
+        function paintRecordTrack() {
+            if (!recordMap) return;
+            recordTrackHalo.setLatLngs(positions);
+            recordTrack.setLatLngs(positions);
+            if (!lastFix) return;
+            if (!recordPosMarker) {
+                recordPosMarker = L.marker(lastFix, { icon: hikerIcon() }).addTo(recordMap);
+            } else {
+                recordPosMarker.setLatLng(lastFix);
+            }
+        }
+
+        function frameRecordMap() {
+            if (!recordMap || activeTab !== 'record') return;
+            recordMap.invalidateSize();
+            const height = document.getElementById('record-map').clientHeight || 0;
+            const cardHeight = document.querySelector('.record-card')?.offsetHeight || 300;
+            const bottom = Math.min(cardHeight + 18, Math.max(120, height * 0.58));
+            const top = 84;
+            if (positions.length > 1) {
+                const bounds = recordTrack.getBounds();
+                if (bounds.isValid()) {
+                    recordMap.fitBounds(bounds, {
+                        paddingTopLeft: [28, top],
+                        paddingBottomRight: [28, bottom],
+                        maxZoom: 17,
+                        animate: false
+                    });
+                }
+            } else if (lastFix) {
+                recordMap.setView(lastFix, 16, { animate: false });
+                recordIdleFramed = true;
+            }
         }
 
         function updateMapPins() {
@@ -1557,15 +1681,10 @@
             
             if (positions.length === 0) fetchWeather(lat, lng);
 
+            lastFix = latLng;
+
             if (!currentPositionMarker) {
-                currentPositionMarker = L.marker(latLng, {
-                    icon: L.divIcon({
-                        html: '<div class="w-5 h-5 rounded-full border-4 border-white shadow-md" style="background:#c81018"></div>',
-                        className: 'current-pos-icon',
-                        iconSize: [20, 20],
-                        iconAnchor: [10, 10]
-                    })
-                }).addTo(map);
+                currentPositionMarker = L.marker(latLng, { icon: hikerIcon() }).addTo(map);
             } else {
                 currentPositionMarker.setLatLng(latLng);
             }
@@ -1578,6 +1697,11 @@
                 }
                 positions.push(latLng);
                 trackLayer.setLatLngs(positions);
+            }
+            paintRecordTrack();
+            if (isTracking) frameRecordMap();
+            else if (activeTab === 'record' && positions.length === 0 && recordMap && lastFix && !recordIdleFramed) {
+                frameRecordMap();
             }
         }
 
@@ -1593,6 +1717,11 @@
             duration = 0;
             trackLayer.setLatLngs([]);
             historyRouteLayer.setLatLngs([]);
+            if (recordTrack) {
+                recordTrack.setLatLngs([]);
+                recordTrackHalo.setLatLngs([]);
+            }
+            frameRecordMap();
             
             document.getElementById('distance-display').innerText = "0.00";
             document.getElementById('pace-display').innerText = "--";
@@ -2060,8 +2189,15 @@
             document.getElementById('tab-icon-' + tabId).classList.add('tab-active');
             document.getElementById('tab-text-' + tabId).classList.add('tab-active');
             
-            if (tabId === 'map' && map) {
-                setTimeout(() => { map.invalidateSize(); }, 50); 
+            if ((tabId === 'map' || tabId === 'record') && map) {
+                setTimeout(() => {
+                    if (tabId === 'map') map.invalidateSize();
+                    if (tabId === 'record') {
+                        ensureRecordMap();
+                        paintRecordTrack();
+                        frameRecordMap();
+                    }
+                }, 50);
             }
         };
 
