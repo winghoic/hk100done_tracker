@@ -181,13 +181,77 @@
             color: var(--ink-soft);
         }
 
-        #scheduleProgressText {
+        #scheduleProgressText,
+        #scheduleScoreText {
             color: var(--red-ink);
             font-weight: 800;
             font-size: 11px;
-            line-height: 1.1;
+            line-height: 1.15;
             text-align: center;
             white-space: nowrap;
+        }
+
+        #edition4ProgressText {
+            color: var(--red-ink);
+            font-weight: 800;
+            font-size: 12px;
+            line-height: 1.25;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .score-sheet {
+            margin: 12px 16px 12px;
+            flex-shrink: 0;
+            background: var(--cream);
+            color: var(--navy);
+            border-radius: 18px;
+            border: 1px solid rgba(16, 35, 58, 0.12);
+            box-shadow: 0 10px 22px rgba(80, 48, 0, 0.12);
+            overflow: hidden;
+        }
+
+        .score-columns,
+        .score-row {
+            display: grid;
+            grid-template-columns: 2.1rem minmax(0, 1fr) 3.2rem 3.6rem;
+            column-gap: 6px;
+            align-items: baseline;
+            padding: 7px 12px;
+        }
+
+        .score-columns {
+            background: var(--navy);
+            color: var(--gold-bright);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+        }
+
+        .score-row {
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1.35;
+            border-top: 1px solid rgba(16, 35, 58, 0.06);
+        }
+
+        .score-row.is-hiked {
+            color: #15803d;
+        }
+
+        .score-row.is-open {
+            color: #c81018;
+        }
+
+        .score-elev,
+        .score-points {
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+        }
+
+        .score-note {
+            margin: 0 16px 28px;
+            flex-shrink: 0;
         }
 
         .home-stack {
@@ -1040,12 +1104,40 @@
                     </div>
                 </div>
                 <p id="scheduleProgressText">0/100 Peaks</p>
+                <p id="scheduleScoreText">0 分</p>
             </div>
         </header>
         
         <div id="schedule-list" class="pb-24 pt-4 space-y-4 pointer-auto">
             <!-- Schedule cards injected by JS -->
         </div>
+    </div>
+
+    <!-- View: 4th-edition scores -->
+    <div id="view-scores" class="view-layer view-layer-bg flex-col">
+        <header class="brand-header">
+            <div class="brand-lockup">
+                <img src="assets/hk100-seal.png" alt="" class="brand-seal" width="52" height="52">
+                <div>
+                    <p class="brand-zh">第四屆</p>
+                    <h1>Scores</h1>
+                    <p class="brand-personal">2026–2027</p>
+                </div>
+            </div>
+            <div class="brand-progress">
+                <p id="edition4ProgressText" aria-live="polite">0 座 / 0 分</p>
+            </div>
+        </header>
+        <div class="score-sheet pointer-auto">
+            <div class="score-columns">
+                <span>#</span>
+                <span>山峰</span>
+                <span>m</span>
+                <span>分</span>
+            </div>
+            <div id="edition4-list"></div>
+        </div>
+        <p class="fan-note score-note">A personal log for your own Hong Kong Hundred Done hikes. Not an official Life Fever product.</p>
     </div>
 
     <!-- View: History -->
@@ -1124,7 +1216,7 @@
                         <h3 class="font-bold text-lg leading-tight text-white">Hong Kong 100 Done</h3>
                         <p class="text-xs text-gray-400 mt-1">Your count toward all 100 peaks.</p>
                         <div class="award-count">
-                            <span id="hk100BadgeCount">0 / 100</span> Peaks
+                            <span id="hk100BadgeCount">0 / 100</span> Peaks · <span id="hk100BadgeScore">0 分</span>
                         </div>
                     </div>
                 </div>
@@ -1180,25 +1272,29 @@
     </div>
 
     <!-- Bottom Tab Navigation Bar -->
-    <div class="tab-bar w-full flex justify-around items-center">
-        <button onclick="switchTab('map')" class="flex flex-col items-center p-2 w-16 group" id="tab-btn-map">
-            <i class="fa-solid fa-map text-xl mb-1 tab-icon tab-active group-active:scale-90" id="tab-icon-map"></i>
+    <div class="tab-bar w-full flex items-center">
+        <button onclick="switchTab('map')" class="flex flex-1 min-w-0 flex-col items-center py-2 px-0.5 group" id="tab-btn-map">
+            <i class="fa-solid fa-map text-lg mb-1 tab-icon tab-active group-active:scale-90" id="tab-icon-map"></i>
             <span class="text-[10px] font-medium tab-icon tab-active" id="tab-text-map">Map</span>
         </button>
-        <button onclick="switchTab('record')" class="flex flex-col items-center p-2 w-16 group" id="tab-btn-record">
-            <i class="fa-solid fa-route text-xl mb-1 tab-icon group-active:scale-90" id="tab-icon-record"></i>
+        <button onclick="switchTab('record')" class="flex flex-1 min-w-0 flex-col items-center py-2 px-0.5 group" id="tab-btn-record">
+            <i class="fa-solid fa-route text-lg mb-1 tab-icon group-active:scale-90" id="tab-icon-record"></i>
             <span class="text-[10px] font-medium tab-icon" id="tab-text-record">Record</span>
         </button>
-        <button onclick="switchTab('schedule')" class="flex flex-col items-center p-2 w-16 group" id="tab-btn-schedule">
-            <i class="fa-solid fa-tasks text-xl mb-1 tab-icon group-active:scale-90" id="tab-icon-schedule"></i>
+        <button onclick="switchTab('schedule')" class="flex flex-1 min-w-0 flex-col items-center py-2 px-0.5 group" id="tab-btn-schedule">
+            <i class="fa-solid fa-tasks text-lg mb-1 tab-icon group-active:scale-90" id="tab-icon-schedule"></i>
             <span class="text-[10px] font-medium tab-icon" id="tab-text-schedule">Schedule</span>
         </button>
-        <button onclick="switchTab('history')" class="flex flex-col items-center p-2 w-16 group" id="tab-btn-history">
-            <i class="fa-solid fa-clock-rotate-left text-xl mb-1 tab-icon group-active:scale-90" id="tab-icon-history"></i>
+        <button onclick="switchTab('scores')" class="flex flex-1 min-w-0 flex-col items-center py-2 px-0.5 group" id="tab-btn-scores">
+            <i class="fa-solid fa-list-ol text-lg mb-1 tab-icon group-active:scale-90" id="tab-icon-scores"></i>
+            <span class="text-[10px] font-medium tab-icon" id="tab-text-scores">Scores</span>
+        </button>
+        <button onclick="switchTab('history')" class="flex flex-1 min-w-0 flex-col items-center py-2 px-0.5 group" id="tab-btn-history">
+            <i class="fa-solid fa-clock-rotate-left text-lg mb-1 tab-icon group-active:scale-90" id="tab-icon-history"></i>
             <span class="text-[10px] font-medium tab-icon" id="tab-text-history">History</span>
         </button>
-        <button onclick="switchTab('profile')" class="flex flex-col items-center p-2 w-16 group" id="tab-btn-profile">
-            <i class="fa-solid fa-user text-xl mb-1 tab-icon group-active:scale-90" id="tab-icon-profile"></i>
+        <button onclick="switchTab('profile')" class="flex flex-1 min-w-0 flex-col items-center py-2 px-0.5 group" id="tab-btn-profile">
+            <i class="fa-solid fa-user text-lg mb-1 tab-icon group-active:scale-90" id="tab-icon-profile"></i>
             <span class="text-[10px] font-medium tab-icon" id="tab-text-profile">Profile</span>
         </button>
     </div>
@@ -1900,13 +1996,56 @@
             updateProgressRing();
         }
 
-        function updateProgressRing() {
+        function readEditionProgress() {
+            const api = window.hk100Edition4;
+            const summary = api && typeof api.summarize === 'function'
+                ? api.summarize({ completedChallenges, hikes: hikeHistory })
+                : null;
+            if (summary) {
+                return {
+                    count: summary.hikedCount,
+                    scoreLabel: `${api.formatScoreTenths(summary.scoreTenths)} 分`,
+                    totalsLabel: api.formatTotals(summary),
+                    summary
+                };
+            }
             let completedPeaks = 0;
             hk100Data.forEach(item => {
-                if (completedChallenges[item.id]) {
-                    completedPeaks += item.peakCount;
-                }
+                if (completedChallenges[item.id]) completedPeaks += item.peakCount;
             });
+            return {
+                count: completedPeaks,
+                scoreLabel: '0 分',
+                totalsLabel: `${completedPeaks} 座 / 0 分`,
+                summary: null
+            };
+        }
+
+        function renderEdition4(progress) {
+            const scoreText = document.getElementById('scheduleScoreText');
+            if (scoreText) scoreText.textContent = progress.scoreLabel;
+            const badgeScore = document.getElementById('hk100BadgeScore');
+            if (badgeScore) badgeScore.textContent = progress.scoreLabel;
+            const editionTotals = document.getElementById('edition4ProgressText');
+            if (editionTotals) editionTotals.textContent = progress.totalsLabel;
+
+            const list = document.getElementById('edition4-list');
+            if (!list || !progress.summary) return;
+            list.innerHTML = progress.summary.rows.map(row => {
+                const tone = row.hiked ? 'is-hiked' : 'is-open';
+                return `<div class="score-row ${tone}" data-rank="${row.rank}" data-hiked="${row.hiked ? 'yes' : 'no'}">
+                    <span class="score-rank">${row.rank}</span>
+                    <span class="score-name">${escapeHtml(row.name)}</span>
+                    <span class="score-elev">${row.elev}</span>
+                    <span class="score-points">${escapeHtml(window.hk100Edition4.formatScoreTenths(row.scoreTenths))}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function updateProgressRing() {
+            const progress = readEditionProgress();
+            const completedPeaks = progress.count;
+            renderEdition4(progress);
             
             const percentage = Math.round((completedPeaks / TOTAL_PEAKS) * 100);
             
@@ -1929,6 +2068,11 @@
                 const offset = circumference - (percentage / 100) * circumference;
                 circle.style.strokeDashoffset = offset;
             }
+
+            const badgeCount = document.getElementById('hk100BadgeCount');
+            if (badgeCount) badgeCount.innerText = `${completedPeaks} / 100`;
+            const badgeIcon = document.getElementById('hk100BadgeIcon');
+            if (badgeIcon) badgeIcon.classList.toggle('is-complete', completedPeaks >= 100);
         }
 
         function renderHistoryList() {
@@ -2180,17 +2324,7 @@
             
             document.getElementById('total-distance').innerText = totalDist.toFixed(1);
             document.getElementById('total-time').innerText = Math.floor(totalDur / 3600) + 'h';
-            
-            let completedPeaks = 0;
-            hk100Data.forEach(item => {
-                if (completedChallenges[item.id]) {
-                    completedPeaks += item.peakCount;
-                }
-            });
-
-            document.getElementById('hk100BadgeCount').innerText = `${completedPeaks} / 100`;
-            const badgeIcon = document.getElementById('hk100BadgeIcon');
-            if (badgeIcon) badgeIcon.classList.toggle('is-complete', completedPeaks >= 100);
+            updateProgressRing();
         }
 
         function refreshVisibleMap() {
@@ -2277,6 +2411,7 @@
             }
         });
     </script>
+    <script type="module" src="./js/edition4-scores.js"></script>
     <script type="module" src="./js/boot.js"></script>
 </body>
 </html>
