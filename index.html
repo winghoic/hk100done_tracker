@@ -34,7 +34,11 @@
         html {
             height: 100%;
             height: 100dvh;
+            width: 100%;
+            max-width: 100dvw;
             overflow: hidden;
+            overflow-x: hidden;
+            overscroll-behavior-x: none;
             background-color: var(--navy);
         }
 
@@ -45,9 +49,12 @@
             user-select: none;
             -webkit-user-select: none;
             overflow: hidden;
+            overflow-x: hidden;
+            overscroll-behavior-x: none;
             margin: 0;
             padding: 0;
             width: 100%;
+            max-width: 100%;
             height: 100%;
             min-height: -webkit-fill-available;
             display: flex;
@@ -61,7 +68,9 @@
             position: relative;
             flex: 1 1 auto;
             min-height: 0;
+            min-width: 0;
             width: 100%;
+            max-width: 100%;
             overflow: hidden;
         }
         
@@ -103,6 +112,11 @@
             position: relative;
             flex: 0 0 auto;
             width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            overflow: hidden;
+            touch-action: pan-y;
             padding-bottom: calc(12px + var(--safe-area-bottom));
             padding-top: 8px;
             z-index: 50;
@@ -121,7 +135,8 @@
 
         .tab-bar button {
             min-height: 48px;
-            min-width: 56px;
+            min-width: 0;
+            touch-action: pan-y;
         }
 
         .brand-header {
@@ -132,9 +147,14 @@
             align-items: center;
             justify-content: space-between;
             gap: 12px;
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
             padding: calc(12px + var(--safe-area-top)) 16px 12px;
             background: linear-gradient(180deg, rgba(255, 248, 226, 0.98), rgba(240, 206, 112, 0.96));
             box-shadow: inset 0 -3px 0 var(--red);
+            touch-action: pan-y;
         }
 
         .brand-lockup {
@@ -203,6 +223,10 @@
         .score-sheet {
             margin: 12px 16px 12px;
             flex-shrink: 0;
+            align-self: stretch;
+            min-width: 0;
+            max-width: 100%;
+            box-sizing: border-box;
             background: var(--cream);
             color: var(--navy);
             border-radius: 18px;
@@ -214,10 +238,19 @@
         .score-columns,
         .score-row {
             display: grid;
-            grid-template-columns: 2.1rem minmax(0, 1fr) 3.2rem 3.6rem;
+            grid-template-columns: 2.1rem minmax(0, 1fr) 3.1rem 3.4rem;
             column-gap: 6px;
             align-items: baseline;
+            box-sizing: border-box;
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
             padding: 7px 12px;
+        }
+
+        .score-name {
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .score-columns {
@@ -252,6 +285,9 @@
         .score-note {
             margin: 0 16px 28px;
             flex-shrink: 0;
+            min-width: 0;
+            max-width: 100%;
+            box-sizing: border-box;
         }
 
         .home-stack {
@@ -259,10 +295,19 @@
             gap: 10px;
         }
 
+        .home-brand,
+        .home-status,
+        .record-card,
+        .record-zoom {
+            touch-action: pan-y;
+        }
+
         .home-brand {
             display: flex;
             align-items: center;
             gap: 10px;
+            max-width: 100%;
+            box-sizing: border-box;
             background: linear-gradient(180deg, rgba(255, 248, 226, 0.97), rgba(236, 196, 78, 0.95));
             border-radius: 999px;
             padding: 5px 16px 5px 5px;
@@ -346,13 +391,17 @@
         .record-brand {
             position: absolute;
             top: calc(10px + var(--safe-area-top));
-            left: 50%;
-            transform: translateX(-50%);
+            left: 0;
+            right: 0;
+            margin-inline: auto;
+            width: max-content;
+            max-width: calc(100% - 92px);
             z-index: 3;
             display: flex;
             align-items: center;
             gap: 10px;
-            max-width: calc(100% - 92px);
+            box-sizing: border-box;
+            touch-action: pan-y;
             background: linear-gradient(180deg, rgba(255, 248, 226, 0.96), rgba(236, 196, 78, 0.94));
             border-radius: 999px;
             padding: 5px 14px 5px 5px;
@@ -396,6 +445,9 @@
             position: relative;
             z-index: 1;
             border-radius: 28px;
+            box-sizing: border-box;
+            max-width: 100%;
+            min-width: 0;
             padding: 16px 16px 14px;
             background: rgba(16, 35, 58, 0.94);
             color: var(--cream);
@@ -474,6 +526,9 @@
             border-radius: 20px;
             display: flex;
             flex-direction: column;
+            box-sizing: border-box;
+            min-width: 0;
+            max-width: calc(100% - 32px);
         }
 
         .peak-card.is-done {
@@ -563,6 +618,8 @@
             line-height: 1.35;
             font-weight: 800;
             color: var(--cream);
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .peak-card.is-done .peak-names {
@@ -599,6 +656,9 @@
             padding: 18px;
             border-radius: 24px;
             position: relative;
+            box-sizing: border-box;
+            min-width: 0;
+            max-width: 100%;
         }
 
         .hike-card h3 {
@@ -606,6 +666,7 @@
             font-weight: 800;
             color: var(--cream);
             margin-bottom: 4px;
+            overflow-wrap: anywhere;
         }
 
         .hike-date {
@@ -895,12 +956,30 @@
             position: absolute;
             inset: 0;
             width: 100%;
+            max-width: 100%;
+            min-width: 0;
             height: auto;
             z-index: 10;
             display: none !important;
+            overflow-x: hidden;
+            overflow-x: clip;
             overflow-y: auto;
+            overscroll-behavior-x: none;
+            touch-action: pan-y;
             padding-top: 0;
             pointer-events: none;
+            box-sizing: border-box;
+        }
+        /* The map lives under these layers. pan-y on the shell must not
+           cancel a sideways drag that starts on the map itself. */
+        #view-map,
+        #view-record {
+            touch-action: auto;
+        }
+        #map,
+        #record-map {
+            max-width: 100%;
+            overflow: hidden;
         }
         .view-layer.active {
             display: flex !important;
@@ -920,11 +999,13 @@
         .view-layer-bg::before {
             content: "";
             position: absolute;
-            left: -4%;
-            right: -4%;
+            left: 0;
+            right: 0;
             bottom: 0;
             height: 168px;
-            background: url("assets/mountains.svg") center bottom / 100% 100% no-repeat;
+            /* Paint the ridges a little wider than the box and clip them.
+               The box itself stays inside the view, so it cannot widen the scrollport. */
+            background: url("assets/mountains.svg") center bottom / 108% 100% no-repeat;
             pointer-events: none;
             z-index: 0;
         }
@@ -968,7 +1049,7 @@
             background: linear-gradient(180deg, #1c4468, #10233a);
             border: 1px solid rgba(226, 176, 58, 0.5);
             border-radius: 18px;
-            width: min(300px, calc(100vw - 48px));
+            width: min(300px, calc(100dvw - 48px));
             box-shadow: 0 20px 40px rgba(16, 24, 32, 0.45);
             color: var(--cream);
         }
