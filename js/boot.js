@@ -1,7 +1,19 @@
 import { firebaseConfig } from "./firebase-config.js";
 import { createTrackerSync } from "./cloud-sync.js";
 import { createHikeId, visibleFingerprint } from "./sync-model.js";
-import { prepareGpxDownload, trackAvailability } from "./gpx.js";
+import { hikeFromGpx, prepareGpxDownload, trackAvailability } from "./gpx.js";
+import {
+    ACTIVE_RECORDING_KEY,
+    BACKGROUND_RECORDING_NOTE,
+    PAUSED_RECORDING_NOTE,
+    RESTORED_RECORDING_NOTE,
+    clearActiveRecording,
+    elapsedSeconds,
+    fixIsStale,
+    readActiveRecording,
+    recordingResumePlan,
+    writeActiveRecording,
+} from "./recording.js";
 
 const RETIRED_STRAVA_KEYS = ["hk100_strava_session_v1", "hk100_strava_oauth_v1"];
 
@@ -32,6 +44,22 @@ const sync = createTrackerSync({
 window.createHikeId = () => createHikeId();
 window.trackerSync = sync;
 window.hikeTrackNote = (hike) => trackAvailability(hike).note;
+window.prepareHikeFromGpx = function prepareHikeFromGpx(text, filename) {
+    const id = typeof window.createHikeId === "function" ? window.createHikeId() : `hike_${Date.now()}`;
+    return hikeFromGpx(text, { id, filename });
+};
+window.recordingSession = {
+    storageKey: ACTIVE_RECORDING_KEY,
+    elapsedSeconds,
+    fixIsStale,
+    resumePlan: recordingResumePlan,
+    read: readActiveRecording,
+    write: writeActiveRecording,
+    clear: clearActiveRecording,
+    backgroundNote: BACKGROUND_RECORDING_NOTE,
+    restoredNote: RESTORED_RECORDING_NOTE,
+    pausedNote: PAUSED_RECORDING_NOTE,
+};
 
 window.downloadHikeGpx = function downloadHikeGpx(id) {
     const hike = findHike(id);
