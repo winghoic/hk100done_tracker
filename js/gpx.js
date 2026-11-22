@@ -131,3 +131,220 @@ export function buildGpx(hike, now = Date.now()) {
         ``,
     ].join("\n");
 }
+
+export const MAX_IMPORT_POINTS = 40000;
+
+export function nameFromFilename(filename) {
+    const base = String(filename || "").split(/[/\\]/).pop() || "";
+    return base.replace(/\.gpx$/i, "").trim();
+}
+
+export function trackDistanceKm(points) {
+    const list = Array.isArray(points) ? points : [];
+    let total = 0;
+    for (let i = 1; i < list.length; i += 1) {
+        const prev = pairLatLng(list[i - 1]);
+        const next = pairLatLng(list[i]);
+        if (!prev || !next) continue;
+        total += haversineKm(prev[0], prev[1], next[0], next[1]);
+    }
+    return total;
+}
+
+export function parseGpx(xml) {
+    const source = stripXmlNoise(xml);
+    const tracked = pointsFor(source, "trkpt");
+    const points = tracked.length ? tracked : pointsFor(source, "rtept");
+    return {
+        name: cleanText(firstNamed(source, "name"), 80),
+        comment: cleanText(firstNamed(source, "desc"), 500),
+        points,
+    };
+}
+
+export function hikeFromGpx(xml, options = {}) {
+    const parsed = parseGpx(xml);
+    if (!parsed.points.length) {
+        return { ok: false, message: "This GPX file has no track points to import." };
+    }
+    const now = finiteNow(options.now);
+    const limit = Math.max(2, Number(options.maxPoints) || MAX_IMPORT_POINTS);
+    const stored = thinPoints(parsed.points, limit);
+    let earliest = Infinity;
+    let latest = -Infinity;
+    for (const point of parsed.points) {
+        if (!Number.isFinite(point.timeMs)) continue;
+        if (point.timeMs < earliest) earliest = point.timeMs;
+        if (point.timeMs > latest) latest = point.timeMs;
+    }
+    let createdAt = now;
+    let duration = 0;
+    if (earliest !== Infinity) {
+        createdAt = latest;
+        duration = Math.max(0, Math.round((latest - earliest) / 1000));
+    }
+    const formatDate = typeof options.formatDate === "function" ? options.formatDate : formatHikeDate;
+    const name = cleanText(parsed.name || nameFromFilename(options.filename).replace(/[_]+/g, " "), 80) || "Imported hike";
+    const hike = {
+        id: String(options.id || ""),
+        name,
+        date: String(formatDate(createdAt) || ""),
+        distance: trackDistanceKm(stored.map((point) => [point.lat, point.lng])).toFixed(2),
+        duration,
+        points: stored.map((point) => [point.lat, point.lng]),
+        weather: "--",
+        comment: parsed.comment,
+        photo: null,
+        weekId: null,
+        createdAt,
+    };
+    const truncated = stored.length < parsed.points.length;
+    return {
+        ok: true,
+        hike,
+        truncated,
+        pointCount: stored.length,
+        message: truncated
+            ? "GPX file imported. The saved track was shortened so it fits on this device."
+            : "GPX file imported.",
+    };
+}
+
+function formatHikeDate(epochMs) {
+    const date = new Date(epochMs);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleDateString();
+}
+
+function finiteNow(value) {
+    const now = Number(value);
+    return Number.isFinite(now) ? now : Date.now();
+}
+
+function pairLatLng(point) {
+    if (Array.isArray(point) && point.length >= 2) {
+        const lat = Number(point[0]);
+        const lng = Number(point[1]);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
+    }
+    if (point && typeof point === "object") {
+        const lat = Number(point.lat);
+        const lng = Number(point.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
+    }
+    return null;
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+    const earthKm = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return earthKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function stripXmlNoise(xml) {
+    return String(xml || "")
+        .replace(/^\uFEFF/, "")
+        .replace(/<!--[\s\S]*?-->/g, "")
+        .replace(/<\?[\s\S]*?\?>/g, "")
+        .replace(/<!DOCTYPE[\s\S]*?>/gi, "");
+}
+
+function pointsFor(xml, tag) {
+    const re = new RegExp(
+        `<(?:[\\w.-]+:)?${tag}\\b([^>]*?)(?:/>|>([\\s\\S]*?)</(?:[\\w.-]+:)?${tag}>)`,
+        "gi"
+    );
+    const points = [];
+    for (const match of xml.matchAll(re)) {
+        const attrs = match[1] || "";
+        const body = match[2] || "";
+        const lat = Number(attr(attrs, "lat"));
+        const lng = Number(attr(attrs, "lon") || attr(attrs, "lng"));
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
+        const timeMs = Date.parse(childText(body, "time"));
+        points.push({ lat, lng, timeMs: Number.isFinite(timeMs) ? timeMs : null });
+    }
+    return points;
+}
+
+function attr(text, name) {
+    const match = String(text || "").match(new RegExp(`(?:^|\\s)${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, "i"));
+    if (!match) return "";
+    return match[2] != null ? match[2] : (match[3] || "");
+}
+
+function childText(body, tag) {
+    const match = String(body || "").match(new RegExp(
+        `<(?:[\\w.-]+:)?${tag}\\b[^>]*>([\\s\\S]*?)</(?:[\\w.-]+:)?${tag}>`,
+        "i"
+    ));
+    if (!match) return "";
+    return decodeXml(unwrapCdata(match[1]).replace(/<[^>]+>/g, "").trim());
+}
+
+function firstNamed(xml, tag) {
+    for (const parent of ["metadata", "trk", "rte"]) {
+        const block = blockInner(xml, parent);
+        const text = block ? childText(block, tag) : "";
+        if (text) return text;
+    }
+    return childText(xml, tag);
+}
+
+function blockInner(xml, tag) {
+    const match = String(xml || "").match(new RegExp(
+        `<(?:[\\w.-]+:)?${tag}\\b[^>]*>([\\s\\S]*?)</(?:[\\w.-]+:)?${tag}>`,
+        "i"
+    ));
+    return match ? match[1] : "";
+}
+
+function unwrapCdata(value) {
+    const match = String(value || "").trim().match(/^<!\[CDATA\[([\s\S]*?)\]\]>$/);
+    return match ? match[1] : String(value || "");
+}
+
+function decodeXml(value) {
+    return String(value || "")
+        .replace(/&#x([0-9a-f]+);/gi, (_, hex) => safeCodePoint(parseInt(hex, 16)))
+        .replace(/&#(\d+);/g, (_, num) => safeCodePoint(Number(num)))
+        .replace(/&apos;/g, "'")
+        .replace(/&quot;/g, "\"")
+        .replace(/&gt;/g, ">")
+        .replace(/&lt;/g, "<")
+        .replace(/&amp;/g, "&");
+}
+
+function safeCodePoint(value) {
+    if (!Number.isFinite(value) || value < 0 || value > 0x10ffff) return "";
+    try {
+        return String.fromCodePoint(value);
+    } catch {
+        return "";
+    }
+}
+
+function cleanText(value, max) {
+    const text = String(value || "").replace(/[\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim();
+    if (text.length <= max) return text;
+    return text.slice(0, max).trim();
+}
+
+function thinPoints(points, max) {
+    if (points.length <= max) return points.slice();
+    const last = points.length - 1;
+    const used = new Set();
+    const out = [];
+    for (let i = 0; i < max; i += 1) {
+        const index = Math.round((i * last) / (max - 1));
+        if (used.has(index)) continue;
+        used.add(index);
+        out.push(points[index]);
+    }
+    return out;
+}

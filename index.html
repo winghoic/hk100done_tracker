@@ -798,6 +798,59 @@
             font-size: 16px;
         }
 
+        .import-gpx-wrap {
+            position: relative;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .import-gpx {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            min-height: 48px;
+            box-sizing: border-box;
+            border-radius: 16px;
+            background: var(--navy);
+            color: var(--gold-bright);
+            font-weight: 800;
+            border: 1px solid rgba(226, 176, 58, 0.45);
+            touch-action: pan-y;
+        }
+
+        .import-note {
+            margin: 8px 4px 0;
+            font-size: 13px;
+            line-height: 1.35;
+            color: var(--navy);
+            font-weight: 700;
+        }
+
+        .gpx-file-input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .recording-status {
+            margin: 0 0 10px;
+            text-align: center;
+            font-size: 12px;
+            line-height: 1.35;
+            font-weight: 700;
+            color: var(--gold-bright);
+        }
+
         .brand-progress {
             display: flex;
             flex-direction: column;
@@ -1145,6 +1198,8 @@
                 </div>
             </div>
             
+            <p id="recording-status" class="recording-status hidden" aria-live="polite"></p>
+
             <div class="flex justify-center space-x-4">
                 <button id="btn-start" onclick="startTracking()" class="w-20 h-20 rounded-full flex justify-center items-center active:scale-95 transition-transform">
                     <i class="fa-solid fa-play text-2xl text-white ml-1"></i>
@@ -1233,6 +1288,14 @@
                 </div>
             </div>
         </header>
+        <div class="px-4 pt-4 pointer-auto import-gpx-wrap">
+            <label for="gpx-file-input" class="import-gpx" id="btn-import-gpx">
+                <i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i>
+                <span>Import GPX</span>
+            </label>
+            <input id="gpx-file-input" class="gpx-file-input" type="file" accept=".gpx,.xml,application/gpx+xml,application/xml,text/xml,text/plain">
+            <p class="import-note">A GPX track is saved on this device like a recorded hike. Edit it to link a peak week.</p>
+        </div>
         <div id="history-list" class="p-4 space-y-4 pb-24 pointer-auto">
             <!-- History items injected by JS -->
         </div>
@@ -1554,8 +1617,20 @@
         let startTime = null;
         let distance = 0;
         let duration = 0;
-        let timerInterval;
+        let timerInterval = null;
         let geoWatchId = null;
+        let recordingPaused = false;
+        let lastFixAt = 0;
+        let hiddenAt = 0;
+        let wakeLockSentinel = null;
+        let wakeLockToken = 0;
+        let fixPump = null;
+        let recordingStatusTimer = 0;
+        let recordingPersistTimer = 0;
+        let recordingGuardsInstalled = false;
+        let lastWatchRearmAt = 0;
+        const GEO_WATCH_OPTIONS = { enableHighAccuracy: true, maximumAge: 0 };
+        const GEO_SAMPLE_OPTIONS = { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 };
         let activeTab = 'map';
         let currentWeatherString = "--";
         
@@ -1875,31 +1950,53 @@
         }
 
         function handlePosition(position) {
+            ingestFix(position, 'watch');
+        }
+
+        function handleSample(position) {
+            ingestFix(position, 'sample');
+        }
+
+        function ingestFix(position, source) {
+            if (!position || !position.coords) return;
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
             const latLng = [lat, lng];
-            
+
             const locText = document.getElementById('location-text');
             if (locText) locText.innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            
+
             if (positions.length === 0) fetchWeather(lat, lng);
 
             lastFix = latLng;
+            lastFixAt = Date.now();
 
-            if (!currentPositionMarker) {
-                currentPositionMarker = L.marker(latLng, { icon: hikerIcon() }).addTo(map);
-            } else {
-                currentPositionMarker.setLatLng(latLng);
+            if (map) {
+                if (!currentPositionMarker) {
+                    currentPositionMarker = L.marker(latLng, { icon: hikerIcon() }).addTo(map);
+                } else {
+                    currentPositionMarker.setLatLng(latLng);
+                }
             }
 
             if (isTracking) {
+                if (source === 'sample' && positions.length) {
+                    const lastPos = positions[positions.length - 1];
+                    if (calculateDistance(lastPos[0], lastPos[1], lat, lng) < 0.003) {
+                        paintRecordTrack();
+                        return;
+                    }
+                }
                 if (positions.length > 0) {
                     const lastPos = positions[positions.length - 1];
                     distance += calculateDistance(lastPos[0], lastPos[1], lat, lng);
-                    document.getElementById('distance-display').innerText = distance.toFixed(2);
+                    const distanceEl = document.getElementById('distance-display');
+                    if (distanceEl) distanceEl.innerText = distance.toFixed(2);
                 }
                 positions.push(latLng);
-                trackLayer.setLatLngs(positions);
+                if (trackLayer) trackLayer.setLatLngs(positions);
+                scheduleRecordingPersist();
             }
             paintRecordTrack();
             if (isTracking) frameRecordMap();
@@ -1909,71 +2006,329 @@
         }
 
         function handleError(error) {
+            const denied = error && Number(error.code) === 1;
+            if (denied) stopFixPump();
             const locText = document.getElementById('location-text');
-            if (locText) locText.innerText = "GPS unavailable";
+            if (!locText) return;
+            if (denied) {
+                locText.innerText = "Location permission is off";
+                return;
+            }
+            const api = window.recordingSession;
+            const stale = !lastFixAt || (api && api.fixIsStale(lastFixAt, Date.now()));
+            if (stale) locText.innerText = isTracking ? "GPS waiting…" : "GPS unavailable";
+        }
+
+        function recordingStores() {
+            const stores = [];
+            try { if (window.sessionStorage) stores.push(window.sessionStorage); } catch (err) {}
+            try { if (window.localStorage) stores.push(window.localStorage); } catch (err) {}
+            return stores;
+        }
+
+        function currentDuration() {
+            if (isTracking && startTime) {
+                const api = window.recordingSession;
+                if (api && typeof api.elapsedSeconds === 'function') return api.elapsedSeconds(startTime, Date.now());
+                return Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+            }
+            return duration;
+        }
+
+        function recordingState() {
+            return {
+                positions,
+                distance,
+                startTime,
+                duration: currentDuration(),
+                tracking: isTracking,
+                paused: recordingPaused
+            };
+        }
+
+        function flushRecordingPersist() {
+            const api = window.recordingSession;
+            if (!api) return;
+            if (recordingPersistTimer) {
+                clearTimeout(recordingPersistTimer);
+                recordingPersistTimer = 0;
+            }
+            if (!isTracking && !recordingPaused) api.clear(recordingStores());
+            else api.write(recordingStores(), recordingState(), Date.now());
+        }
+
+        function scheduleRecordingPersist() {
+            if (recordingPersistTimer || !window.recordingSession) return;
+            recordingPersistTimer = setTimeout(() => {
+                recordingPersistTimer = 0;
+                flushRecordingPersist();
+            }, 2000);
+        }
+
+        function showRecordingStatus(message) {
+            const el = document.getElementById('recording-status');
+            if (!el) return;
+            if (recordingStatusTimer) clearTimeout(recordingStatusTimer);
+            recordingStatusTimer = 0;
+            if (!message) {
+                el.textContent = '';
+                el.classList.add('hidden');
+                return;
+            }
+            el.textContent = message;
+            el.classList.remove('hidden');
+            recordingStatusTimer = setTimeout(() => {
+                el.classList.add('hidden');
+            }, 12000);
+        }
+
+        function setRecordingChrome(mode) {
+            document.getElementById('btn-start').classList.toggle('hidden', mode !== 'idle');
+            document.getElementById('btn-pause').classList.toggle('hidden', mode !== 'rec');
+            document.getElementById('btn-resume').classList.toggle('hidden', mode !== 'paused');
+            document.getElementById('btn-stop').classList.toggle('hidden', mode === 'idle');
+            const indicator = document.getElementById('recording-indicator');
+            indicator.classList.toggle('hidden', mode === 'idle');
+            if (mode === 'idle') return;
+            const dot = indicator.querySelector('div');
+            const span = indicator.querySelector('span');
+            const live = mode === 'rec';
+            if (dot) dot.className = live
+                ? "w-3 h-3 rounded-full bg-red-500 animate-pulse"
+                : "w-3 h-3 rounded-full bg-yellow-500";
+            if (span) {
+                span.className = live
+                    ? "text-xs font-semibold text-red-500 uppercase tracking-wider"
+                    : "text-xs font-semibold text-yellow-500 uppercase tracking-wider";
+                span.innerText = live ? "REC" : "PAUSED";
+            }
+        }
+
+        function armPositionWatch() {
+            if (!navigator.geolocation) return;
+            if (geoWatchId != null) {
+                navigator.geolocation.clearWatch(geoWatchId);
+                geoWatchId = null;
+            }
+            geoWatchId = navigator.geolocation.watchPosition(handlePosition, handleError, GEO_WATCH_OPTIONS);
+            lastWatchRearmAt = Date.now();
+        }
+
+        function requestFixSample() {
+            if (!navigator.geolocation || !isTracking) return;
+            navigator.geolocation.getCurrentPosition(handleSample, () => {}, GEO_SAMPLE_OPTIONS);
+        }
+
+        function startFixPump() {
+            stopFixPump();
+            fixPump = setInterval(() => {
+                if (!isTracking || !navigator.geolocation) return;
+                const api = window.recordingSession;
+                const stale = !api || api.fixIsStale(lastFixAt, Date.now());
+                if (!stale) return;
+                if (document.visibilityState === 'visible' && Date.now() - lastWatchRearmAt > 15000) {
+                    armPositionWatch();
+                }
+                requestFixSample();
+            }, 5000);
+        }
+
+        function stopFixPump() {
+            if (fixPump) clearInterval(fixPump);
+            fixPump = null;
+        }
+
+        function startRecTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 1000);
+            startFixPump();
+        }
+
+        function stopRecTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = null;
+            stopFixPump();
+        }
+
+        async function syncWakeLock() {
+            const token = ++wakeLockToken;
+            const api = window.recordingSession;
+            const want = api
+                ? api.resumePlan({
+                    tracking: isTracking,
+                    paused: recordingPaused,
+                    visibility: document.visibilityState,
+                    hiddenMs: 0
+                }).wakeLock
+                : (isTracking && !recordingPaused && document.visibilityState === 'visible');
+            if (!want) {
+                const current = wakeLockSentinel;
+                wakeLockSentinel = null;
+                if (current) {
+                    try { await current.release(); } catch (err) {}
+                }
+                return;
+            }
+            if (wakeLockSentinel || !navigator.wakeLock || typeof navigator.wakeLock.request !== 'function') return;
+            try {
+                const sentinel = await navigator.wakeLock.request('screen');
+                const stillWanted = token === wakeLockToken && isTracking && !recordingPaused && document.visibilityState === 'visible';
+                if (!stillWanted) {
+                    try { await sentinel.release(); } catch (err) {}
+                    return;
+                }
+                wakeLockSentinel = sentinel;
+                sentinel.addEventListener('release', () => {
+                    if (wakeLockSentinel === sentinel) wakeLockSentinel = null;
+                });
+            } catch (err) {
+                if (token === wakeLockToken) wakeLockSentinel = null;
+            }
+        }
+
+        function noteRecordingHidden() {
+            if (!hiddenAt) hiddenAt = Date.now();
+            flushRecordingPersist();
+            syncWakeLock();
+        }
+
+        function onBecameVisible(hiddenMs) {
+            const away = Math.max(0, Number(hiddenMs) || 0);
+            const api = window.recordingSession;
+            const plan = api && typeof api.resumePlan === 'function'
+                ? api.resumePlan({
+                    tracking: isTracking,
+                    paused: recordingPaused,
+                    visibility: 'visible',
+                    hiddenMs: away
+                })
+                : {
+                    refreshClock: isTracking && !recordingPaused,
+                    rearmWatch: away > 0,
+                    requestFix: isTracking && !recordingPaused && away > 0,
+                    backgroundNote: false
+                };
+            if (plan.rearmWatch) armPositionWatch();
+            if (plan.refreshClock) startRecTimer();
+            if (plan.requestFix) requestFixSample();
+            if (plan.backgroundNote && api) showRecordingStatus(api.backgroundNote);
+            syncWakeLock();
+        }
+
+        function installRecordingLifecycle() {
+            if (recordingGuardsInstalled) return;
+            recordingGuardsInstalled = true;
+            // iOS suspends timers and watchPosition while the page is hidden. Rearm both on return.
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') {
+                    noteRecordingHidden();
+                    return;
+                }
+                const away = hiddenAt ? Date.now() - hiddenAt : 0;
+                hiddenAt = 0;
+                onBecameVisible(away);
+            });
+            window.addEventListener('pagehide', noteRecordingHidden);
+            window.addEventListener('beforeunload', flushRecordingPersist);
+            window.addEventListener('pageshow', () => {
+                if (document.visibilityState !== 'visible') return;
+                const away = hiddenAt ? Date.now() - hiddenAt : 0;
+                hiddenAt = 0;
+                onBecameVisible(away);
+            });
+            window.addEventListener('freeze', flushRecordingPersist);
+            window.addEventListener('resume', () => {
+                const away = hiddenAt ? Date.now() - hiddenAt : 0;
+                hiddenAt = 0;
+                onBecameVisible(Math.max(away, 1));
+            });
+            window.addEventListener('focus', () => {
+                if (document.visibilityState !== 'visible' || !isTracking) return;
+                const api = window.recordingSession;
+                if (!api || api.fixIsStale(lastFixAt, Date.now())) {
+                    armPositionWatch();
+                    startRecTimer();
+                    requestFixSample();
+                }
+            });
+            window.addEventListener('pointerdown', () => {
+                if (isTracking) syncWakeLock();
+            }, { passive: true });
+        }
+
+        function restoreActiveRecording() {
+            const api = window.recordingSession;
+            if (!api || typeof api.read !== 'function') return;
+            const snap = api.read(recordingStores(), Date.now());
+            if (!snap) return;
+            positions = snap.positions.map(point => [point[0], point[1]]);
+            distance = snap.distance;
+            duration = snap.duration;
+            startTime = snap.startTime;
+            isTracking = snap.tracking === true;
+            recordingPaused = snap.paused === true;
+            const distanceEl = document.getElementById('distance-display');
+            if (distanceEl) distanceEl.innerText = distance.toFixed(2);
+            if (trackLayer) trackLayer.setLatLngs(positions);
+            paintRecordTrack();
+            if (isTracking) {
+                setRecordingChrome('rec');
+                startRecTimer();
+                showRecordingStatus(api.restoredNote);
+            } else if (recordingPaused) {
+                setRecordingChrome('paused');
+                renderClock(duration);
+                showRecordingStatus(api.pausedNote);
+            }
+            syncWakeLock();
         }
 
         function startTracking() {
             isTracking = true;
+            recordingPaused = false;
             positions = [];
             distance = 0;
             duration = 0;
-            trackLayer.setLatLngs([]);
-            historyRouteLayer.setLatLngs([]);
+            showRecordingStatus('');
+            if (trackLayer) trackLayer.setLatLngs([]);
+            if (historyRouteLayer) historyRouteLayer.setLatLngs([]);
             if (recordTrack) {
                 recordTrack.setLatLngs([]);
                 recordTrackHalo.setLatLngs([]);
             }
             frameRecordMap();
-            
+
             document.getElementById('distance-display').innerText = "0.00";
             document.getElementById('pace-display').innerText = "--";
-            
-            document.getElementById('btn-start').classList.add('hidden');
-            document.getElementById('btn-pause').classList.remove('hidden');
-            document.getElementById('btn-stop').classList.remove('hidden');
-            
-            const indicator = document.getElementById('recording-indicator');
-            indicator.classList.remove('hidden');
-            const dot = indicator.querySelector('div');
-            const span = indicator.querySelector('span');
-            if (dot) dot.className = "w-3 h-3 rounded-full bg-red-500 animate-pulse";
-            if (span) {
-                span.className = "text-xs font-semibold text-red-500 uppercase tracking-wider";
-                span.innerText = "REC";
-            }
+            setRecordingChrome('rec');
 
             startTime = Date.now();
-            timerInterval = setInterval(updateTimer, 1000);
+            startRecTimer();
+            flushRecordingPersist();
+            syncWakeLock();
+            requestFixSample();
         }
 
         function pauseTracking() {
+            if (isTracking) renderClock(currentDuration());
             isTracking = false;
-            clearInterval(timerInterval);
-            document.getElementById('btn-pause').classList.add('hidden');
-            document.getElementById('btn-resume').classList.remove('hidden');
-            const indicator = document.getElementById('recording-indicator');
-            if(indicator) {
-                indicator.querySelector('div')?.classList.replace('bg-red-500', 'bg-yellow-500');
-                indicator.querySelector('span').innerText = 'PAUSED';
-                indicator.querySelector('span')?.classList.replace('text-red-500', 'text-yellow-500');
-            }
+            recordingPaused = true;
+            stopRecTimer();
+            setRecordingChrome('paused');
+            flushRecordingPersist();
+            syncWakeLock();
         }
 
         function resumeTracking() {
             isTracking = true;
+            recordingPaused = false;
             startTime = Date.now() - (duration * 1000);
-            timerInterval = setInterval(updateTimer, 1000);
-            
-            document.getElementById('btn-resume').classList.add('hidden');
-            document.getElementById('btn-pause').classList.remove('hidden');
-            
-            const indicator = document.getElementById('recording-indicator');
-            if(indicator) {
-                indicator.querySelector('div')?.classList.replace('bg-yellow-500', 'bg-red-500');
-                indicator.querySelector('span').innerText = 'REC';
-                indicator.querySelector('span')?.classList.replace('text-yellow-500', 'text-red-500');
-            }
+            setRecordingChrome('rec');
+            startRecTimer();
+            flushRecordingPersist();
+            syncWakeLock();
+            requestFixSample();
         }
 
         function stopTracking() {
@@ -2016,29 +2371,35 @@
 
         function resetTracker() {
             isTracking = false;
-            clearInterval(timerInterval);
+            recordingPaused = false;
+            stopRecTimer();
             duration = 0;
-            document.getElementById('timer-display').innerText = "00:00:00";
-            
-            document.getElementById('btn-pause').classList.add('hidden');
-            document.getElementById('btn-resume').classList.add('hidden');
-            document.getElementById('btn-stop').classList.add('hidden');
-            document.getElementById('btn-start').classList.remove('hidden');
-            document.getElementById('recording-indicator').classList.add('hidden');
+            const display = document.getElementById('timer-display');
+            if (display) display.innerText = "00:00:00";
+            setRecordingChrome('idle');
+            showRecordingStatus('');
+            flushRecordingPersist();
+            syncWakeLock();
         }
 
         function updateTimer() {
-            duration = Math.floor((Date.now() - startTime) / 1000);
+            renderClock(currentDuration());
+        }
+
+        function renderClock(totalSeconds) {
+            duration = Math.max(0, Math.floor(Number(totalSeconds) || 0));
             const h = Math.floor(duration / 3600).toString().padStart(2, '0');
             const m = Math.floor((duration % 3600) / 60).toString().padStart(2, '0');
             const s = (duration % 60).toString().padStart(2, '0');
-            document.getElementById('timer-display').innerText = `${h}:${m}:${s}`;
-
+            const display = document.getElementById('timer-display');
+            if (display) display.innerText = `${h}:${m}:${s}`;
+            const pace = document.getElementById('pace-display');
+            if (!pace) return;
             if (distance > 0) {
                 const paceMinutes = (duration / 60) / distance;
                 const pM = Math.floor(paceMinutes);
                 const pS = Math.floor((paceMinutes - pM) * 60).toString().padStart(2, '0');
-                document.getElementById('pace-display').innerText = `${pM}'${pS}"`;
+                pace.innerText = `${pM}'${pS}"`;
             }
         }
 
@@ -2239,6 +2600,58 @@
             else if (action === 'delete') deleteHike(id);
             else if (action === 'gpx' && typeof window.downloadHikeGpx === 'function') window.downloadHikeGpx(id);
         });
+
+        function bindGpxImport() {
+            const input = document.getElementById('gpx-file-input');
+            if (!input || input.dataset.bound === 'yes') return;
+            input.dataset.bound = 'yes';
+            input.addEventListener('change', () => {
+                const file = input.files && input.files[0];
+                input.value = '';
+                if (file) importGpxFile(file);
+            });
+        }
+
+        function importGpxFile(file) {
+            const reader = new FileReader();
+            reader.onload = async () => {
+                const prepare = window.prepareHikeFromGpx;
+                if (typeof prepare !== 'function') {
+                    showIOSAlert('Import GPX', 'Import is still loading. Wait a moment and try again.', [{ text: 'OK', style: 'cancel' }]);
+                    return;
+                }
+                let result = null;
+                try {
+                    result = prepare(String(reader.result || ''), file.name || '');
+                } catch (err) {
+                    result = { ok: false, message: 'This GPX file could not be read.' };
+                }
+                if (!result || !result.ok || !result.hike || !result.hike.id) {
+                    showIOSAlert('Import GPX', (result && result.message) || 'This GPX file has no track points to import.', [{ text: 'OK', style: 'cancel' }]);
+                    return;
+                }
+                hikeHistory.unshift(result.hike);
+                refreshTrackerViews();
+                try {
+                    const safeId = window.CSS && CSS.escape ? CSS.escape(String(result.hike.id)) : String(result.hike.id);
+                    const card = document.querySelector(`[data-hike-id="${safeId}"]`);
+                    const hikeCard = card && card.closest ? card.closest('.hike-card') : null;
+                    if (hikeCard && hikeCard.scrollIntoView) hikeCard.scrollIntoView({ block: 'nearest' });
+                } catch (err) {}
+                await persistTracker();
+                const tail = result.truncated ? ' The saved track was shortened so it fits on this device.' : '';
+                showIOSAlert('GPX imported', `This hike is in History. Edit it to link a peak week and your scores, the same way as a recorded hike.${tail}`, [
+                    { text: 'Edit', style: 'default', action: () => window.openEditModal && window.openEditModal(result.hike.id) },
+                    { text: 'Done', style: 'cancel' }
+                ]);
+            };
+            reader.onerror = () => {
+                showIOSAlert('Import GPX', 'That file could not be read. Choose a GPX track and try again.', [{ text: 'OK', style: 'cancel' }]);
+            };
+            reader.readAsText(file);
+        }
+
+        bindGpxImport();
 
         window.viewHikeOnMap = function(id) {
             let hike = hikeHistory.find(h => String(h.id) === String(id));
@@ -2477,18 +2890,14 @@
             
             fetchWeather(HK_CENTER[0], HK_CENTER[1]);
             refreshTrackerViews();
+            restoreActiveRecording();
+            installRecordingLifecycle();
+            armPositionWatch();
 
             if (typeof window.startTrackerSync === 'function') await window.startTrackerSync();
             else {
                 loadGuestFallback();
                 window.__trackerLoaded = true;
-            }
-            
-            if (navigator.geolocation) {
-                geoWatchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
-                    enableHighAccuracy: true,
-                    maximumAge: 0
-                });
             }
         });
     </script>

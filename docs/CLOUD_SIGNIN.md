@@ -75,3 +75,23 @@ Popup sign-in is the normal path. If the browser blocks the popup, the app conti
 Saved hikes with a GPS track can be downloaded as GPX from History, and from the save prompt at the end of a recording. Each point is latitude, longitude, and a time. Times are spread from the start of the hike to the save time using the recorded duration. The file has no elevation. The route name and comment are escaped as XML text.
 
 A hike with no points shows **No GPS track for this hike** on the history card. Download explains that there is no GPX file. If cloud sync left the track behind (`pointsOmitted`), the card says the GPS track is not on this device.
+
+## GPX import
+
+History has **Import GPX**. Choose a `.gpx` file from a watch or another app. The track becomes a hike on this device, in the same guest or Google-account store as a hike recorded here. Distance is the length of the saved track. When the file has times, the hike date and duration run from the earliest point to the latest. The file's name and description are kept.
+
+The imported hike starts as a free hike (`weekId` empty). **Edit** links a peak week with the same control a recorded hike uses, which updates the schedule ticks and the score table. A peak name in the hike name or comment also counts on the score table, as it does for any other hike.
+
+Download GPX still works for an imported hike. Files longer than 40,000 points keep an even sample of the track, including the first and last points, so the browser can store it. A track that is too large for Firestore stays on this device (`pointsOmitted`), the same rule as a recorded hike.
+
+## Recording while the page is in the background
+
+The timer follows the wall clock. Minimizing the browser, switching tabs, or locking the phone does not throw away points already stored. Pausing still freezes the timer.
+
+While a recording is running and this page is visible, a screen wake lock asks the device not to dim and suspend the page on its own. The lock is dropped when recording is paused or stopped, and when the page is hidden. A browser can refuse the request.
+
+Leaving the page writes the in-progress track on this device under `hk100_active_recording_v1` (session storage and local storage). That copy is not a saved hike and it is not uploaded. If the browser discards or reloads the tab, opening the tracker within 18 hours restores the track and continues. A paused recording stays paused. Save or Discard removes the temporary copy.
+
+Coming back restarts GPS, catches the timer up from the original start time, and shows a short note when the page was hidden for more than a couple of seconds. If no fix arrives for several seconds, a backup location request runs. On a desktop browser that only throttles timers after the window is minimized, that backup can keep adding points.
+
+iPhone Safari cannot keep delivering GPS after you leave Safari, switch apps, or lock the screen. iOS suspends the page. A wake lock, timer, or service worker on a normal website cannot record a track during that suspension. Points taken before the page was suspended are kept, and GPS starts again when you come back. Adding the site to the Home Screen makes it full screen, and iOS still suspends it in the background. For a live recording, leave the tracker open with the screen on.
