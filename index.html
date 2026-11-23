@@ -1072,31 +1072,92 @@
             inset: 0;
             z-index: 50000;
             display: none;
-            align-items: center;
-            justify-content: center;
             box-sizing: border-box;
-            padding: calc(76px + var(--safe-area-top)) 16px calc(24px + var(--safe-area-bottom));
             background: rgba(8, 12, 18, 0.94);
+            touch-action: none;
         }
 
-        .photo-viewer.is-open { display: flex; }
+        .photo-viewer.is-open { display: block; }
 
-        .photo-viewer-close {
+        .photo-viewer-toolbar {
             position: absolute;
             top: calc(12px + var(--safe-area-top));
+            left: 12px;
             right: 12px;
+            z-index: 2;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 8px;
+            pointer-events: none;
+        }
+
+        .photo-viewer-zoom {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            pointer-events: auto;
+        }
+
+        .photo-zoom-btn,
+        .photo-viewer-close {
             min-height: 48px;
-            padding: 0 18px;
+            padding: 0 14px;
             border: 0;
             border-radius: 999px;
             background: var(--gold-bright);
             color: var(--navy);
             font-weight: 800;
-            font-size: 16px;
+            font-size: 15px;
             display: inline-flex;
             align-items: center;
             gap: 8px;
+            pointer-events: auto;
         }
+
+        .photo-zoom-btn:disabled {
+            opacity: 0.45;
+        }
+
+        .photo-viewer-stage {
+            position: absolute;
+            inset: 0;
+            box-sizing: border-box;
+            padding: calc(76px + var(--safe-area-top)) 16px calc(24px + var(--safe-area-bottom));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        .photo-viewer.is-zoomed .photo-viewer-stage {
+            cursor: grab;
+        }
+
+        .photo-viewer.is-panning .photo-viewer-stage {
+            cursor: grabbing;
+        }
+
+        .photo-zoom-hint {
+            position: absolute;
+            left: 50%;
+            bottom: calc(16px + var(--safe-area-bottom));
+            transform: translateX(-50%);
+            z-index: 2;
+            margin: 0;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(16, 35, 58, 0.82);
+            color: var(--cream);
+            font-size: 13px;
+            font-weight: 700;
+            pointer-events: none;
+            display: none;
+            white-space: nowrap;
+        }
+
+        .photo-viewer.is-zoomed .photo-zoom-hint { display: block; }
 
         #photo-viewer-image {
             max-width: 100%;
@@ -1106,6 +1167,11 @@
             object-fit: contain;
             border-radius: 12px;
             box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+            transform-origin: center center;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: none;
         }
 
         .btn-gold {
@@ -1568,11 +1634,26 @@
     </div>
 
     <div id="photo-viewer" class="photo-viewer" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Hike photo">
-        <button type="button" id="photo-viewer-close" class="photo-viewer-close">
-            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-            <span>Close</span>
-        </button>
-        <img id="photo-viewer-image" alt="Saved hike photo">
+        <div id="photo-viewer-stage" class="photo-viewer-stage">
+            <img id="photo-viewer-image" alt="Saved hike photo" draggable="false">
+        </div>
+        <div class="photo-viewer-toolbar">
+            <div class="photo-viewer-zoom">
+                <button type="button" id="photo-zoom-out" class="photo-zoom-btn" aria-label="Zoom out">
+                    <i class="fa-solid fa-magnifying-glass-minus" aria-hidden="true"></i>
+                    <span>Zoom out</span>
+                </button>
+                <button type="button" id="photo-zoom-in" class="photo-zoom-btn" aria-label="Zoom in">
+                    <i class="fa-solid fa-magnifying-glass-plus" aria-hidden="true"></i>
+                    <span>Zoom in</span>
+                </button>
+            </div>
+            <button type="button" id="photo-viewer-close" class="photo-viewer-close">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                <span>Close</span>
+            </button>
+        </div>
+        <p id="photo-zoom-hint" class="photo-zoom-hint">Drag to move</p>
     </div>
 
     <!-- iOS Alert Box -->
@@ -1918,27 +1999,136 @@
         }
 
         let photoViewerReturnFocus = null;
+        let photoZoomState = { scale: 1, x: 0, y: 0 };
+        let photoBaseWidth = 0;
+        let photoBaseHeight = 0;
+        const photoPointers = new Map();
+        let photoDrag = null;
+        let photoPinch = null;
+        let photoLastTap = 0;
+
+        function photoZoomApi() {
+            return window.photoZoom || null;
+        }
+
+        function photoFrame() {
+            const stage = document.getElementById('photo-viewer-stage');
+            if (!stage) return null;
+            const style = getComputedStyle(stage);
+            const padLeft = parseFloat(style.paddingLeft) || 0;
+            const padRight = parseFloat(style.paddingRight) || 0;
+            const padTop = parseFloat(style.paddingTop) || 0;
+            const padBottom = parseFloat(style.paddingBottom) || 0;
+            const width = Math.max(0, stage.clientWidth - padLeft - padRight);
+            const height = Math.max(0, stage.clientHeight - padTop - padBottom);
+            const rect = stage.getBoundingClientRect();
+            return {
+                width,
+                height,
+                centerX: rect.left + padLeft + width / 2,
+                centerY: rect.top + padTop + height / 2,
+            };
+        }
+
+        function paintPhotoZoom() {
+            const viewer = document.getElementById('photo-viewer');
+            const image = document.getElementById('photo-viewer-image');
+            const zoomIn = document.getElementById('photo-zoom-in');
+            const zoomOut = document.getElementById('photo-zoom-out');
+            if (!image) return;
+            const scale = photoZoomState.scale;
+            const x = photoZoomState.x;
+            const y = photoZoomState.y;
+            image.style.transform = scale === 1 && x === 0 && y === 0
+                ? ''
+                : `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
+            if (viewer) viewer.classList.toggle('is-zoomed', scale > 1.01);
+            if (zoomIn) zoomIn.disabled = scale >= 3.99;
+            if (zoomOut) zoomOut.disabled = scale <= 1.01;
+        }
+
+        function rememberPhotoBase() {
+            const image = document.getElementById('photo-viewer-image');
+            const frame = photoFrame();
+            const api = photoZoomApi();
+            if (!image || !frame || !api) return;
+            const previous = image.style.transform;
+            image.style.transform = 'none';
+            const rect = image.getBoundingClientRect();
+            photoBaseWidth = rect.width;
+            photoBaseHeight = rect.height;
+            image.style.transform = previous;
+            photoZoomState = api.clampPan(photoZoomState, photoBaseWidth, photoBaseHeight, frame.width, frame.height);
+            paintPhotoZoom();
+        }
+
+        function resetPhotoZoom() {
+            const api = photoZoomApi();
+            photoZoomState = api ? api.initialPhotoZoom() : { scale: 1, x: 0, y: 0 };
+            photoPointers.clear();
+            photoDrag = null;
+            photoPinch = null;
+            photoLastTap = 0;
+            const viewer = document.getElementById('photo-viewer');
+            if (viewer) viewer.classList.remove('is-panning');
+            paintPhotoZoom();
+        }
+
+        function changePhotoZoom(nextScale, fromX, fromY, toX, toY) {
+            const api = photoZoomApi();
+            const frame = photoFrame();
+            if (!api || !frame) return;
+            photoZoomState = api.zoomGesture(
+                photoZoomState,
+                nextScale,
+                fromX,
+                fromY,
+                toX,
+                toY,
+                photoBaseWidth,
+                photoBaseHeight,
+                frame.width,
+                frame.height
+            );
+            paintPhotoZoom();
+        }
+
+        function zoomPhotoBy(factor, clientX, clientY) {
+            const frame = photoFrame();
+            if (!frame) return;
+            const pointerX = clientX == null ? 0 : clientX - frame.centerX;
+            const pointerY = clientY == null ? 0 : clientY - frame.centerY;
+            changePhotoZoom(photoZoomState.scale * factor, pointerX, pointerY, pointerX, pointerY);
+        }
 
         function openPhotoViewer(src) {
             const safe = safeImageSrc(src);
             const viewer = document.getElementById('photo-viewer');
             const image = document.getElementById('photo-viewer-image');
             if (!safe || !viewer || !image) return;
-            image.src = safe;
+            resetPhotoZoom();
             viewer.classList.add('is-open');
+            image.src = safe;
             viewer.setAttribute('aria-hidden', 'false');
             photoViewerReturnFocus = document.activeElement;
             const close = document.getElementById('photo-viewer-close');
             if (close) close.focus();
+            requestAnimationFrame(rememberPhotoBase);
         }
 
         function closePhotoViewer() {
             const viewer = document.getElementById('photo-viewer');
             if (!viewer || !viewer.classList.contains('is-open')) return;
             viewer.classList.remove('is-open');
+            viewer.classList.remove('is-zoomed');
+            viewer.classList.remove('is-panning');
             viewer.setAttribute('aria-hidden', 'true');
             const image = document.getElementById('photo-viewer-image');
-            if (image) image.removeAttribute('src');
+            if (image) {
+                image.style.transform = '';
+                image.removeAttribute('src');
+            }
+            resetPhotoZoom();
             const back = photoViewerReturnFocus;
             photoViewerReturnFocus = null;
             if (back && typeof back.focus === 'function') {
@@ -1948,14 +2138,182 @@
 
         function bindPhotoViewer() {
             const viewer = document.getElementById('photo-viewer');
-            if (!viewer || viewer.dataset.bound === 'yes') return;
+            const stage = document.getElementById('photo-viewer-stage');
+            const image = document.getElementById('photo-viewer-image');
+            if (!viewer || !stage || viewer.dataset.bound === 'yes') return;
             viewer.dataset.bound = 'yes';
             viewer.addEventListener('click', (event) => {
-                if (event.target === viewer || (event.target.closest && event.target.closest('#photo-viewer-close'))) closePhotoViewer();
+                if (event.target.closest && event.target.closest('#photo-viewer-close')) closePhotoViewer();
+            });
+            const zoomIn = document.getElementById('photo-zoom-in');
+            const zoomOut = document.getElementById('photo-zoom-out');
+            if (zoomIn) zoomIn.addEventListener('click', () => zoomPhotoBy(1.5));
+            if (zoomOut) zoomOut.addEventListener('click', () => zoomPhotoBy(1 / 1.5));
+            if (image) image.addEventListener('load', rememberPhotoBase);
+            stage.addEventListener('wheel', (event) => {
+                if (!viewer.classList.contains('is-open')) return;
+                event.preventDefault();
+                const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+                zoomPhotoBy(factor, event.clientX, event.clientY);
+            }, { passive: false });
+            stage.addEventListener('touchmove', (event) => {
+                if (viewer.classList.contains('is-open')) event.preventDefault();
+            }, { passive: false });
+            stage.addEventListener('pointerdown', onPhotoPointerDown);
+            stage.addEventListener('pointermove', onPhotoPointerMove);
+            stage.addEventListener('pointerup', onPhotoPointerUp);
+            stage.addEventListener('pointercancel', onPhotoPointerUp);
+            window.addEventListener('resize', () => {
+                if (viewer.classList.contains('is-open')) rememberPhotoBase();
             });
             document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape') closePhotoViewer();
+                if (!viewer.classList.contains('is-open')) return;
+                if (event.key === 'Escape') {
+                    closePhotoViewer();
+                    return;
+                }
+                if (event.key === '+' || event.key === '=') {
+                    event.preventDefault();
+                    zoomPhotoBy(1.5);
+                } else if (event.key === '-' || event.key === '_') {
+                    event.preventDefault();
+                    zoomPhotoBy(1 / 1.5);
+                }
             });
+        }
+
+        function photoPointerPoint(id) {
+            return photoPointers.get(id) || null;
+        }
+
+        function beginPhotoPinch() {
+            const api = photoZoomApi();
+            const points = [...photoPointers.values()];
+            const frame = photoFrame();
+            if (!api || points.length < 2 || !frame) return;
+            const midX = (points[0].x + points[1].x) / 2;
+            const midY = (points[0].y + points[1].y) / 2;
+            photoPinch = {
+                state: { ...photoZoomState },
+                distance: api.pointDistance(points[0], points[1]),
+                fromX: midX - frame.centerX,
+                fromY: midY - frame.centerY,
+            };
+            photoDrag = null;
+        }
+
+        function onPhotoPointerDown(event) {
+            const stage = document.getElementById('photo-viewer-stage');
+            if (!stage || (event.pointerType === 'mouse' && event.button !== 0)) return;
+            try { stage.setPointerCapture(event.pointerId); } catch (err) {}
+            photoPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+            if (photoPointers.size >= 2) {
+                beginPhotoPinch();
+                const viewer = document.getElementById('photo-viewer');
+                if (viewer) viewer.classList.add('is-panning');
+                return;
+            }
+            photoDrag = {
+                id: event.pointerId,
+                lastX: event.clientX,
+                lastY: event.clientY,
+                startX: event.clientX,
+                startY: event.clientY,
+                moved: false,
+                target: event.target,
+            };
+        }
+
+        function onPhotoPointerMove(event) {
+            if (!photoPointers.has(event.pointerId)) return;
+            photoPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+            const api = photoZoomApi();
+            const frame = photoFrame();
+            if (!api || !frame) return;
+            if (photoPointers.size >= 2 && photoPinch) {
+                event.preventDefault();
+                const points = [...photoPointers.values()].slice(0, 2);
+                const midX = (points[0].x + points[1].x) / 2;
+                const midY = (points[0].y + points[1].y) / 2;
+                const nextScale = api.pinchScale(
+                    photoPinch.state.scale,
+                    photoPinch.distance,
+                    api.pointDistance(points[0], points[1])
+                );
+                photoZoomState = api.zoomGesture(
+                    photoPinch.state,
+                    nextScale,
+                    photoPinch.fromX,
+                    photoPinch.fromY,
+                    midX - frame.centerX,
+                    midY - frame.centerY,
+                    photoBaseWidth,
+                    photoBaseHeight,
+                    frame.width,
+                    frame.height
+                );
+                paintPhotoZoom();
+                return;
+            }
+            if (!photoDrag || photoDrag.id !== event.pointerId || photoZoomState.scale <= 1.01) return;
+            const dx = event.clientX - photoDrag.lastX;
+            const dy = event.clientY - photoDrag.lastY;
+            photoDrag.lastX = event.clientX;
+            photoDrag.lastY = event.clientY;
+            if (Math.hypot(event.clientX - photoDrag.startX, event.clientY - photoDrag.startY) > 8) {
+                photoDrag.moved = true;
+                const viewer = document.getElementById('photo-viewer');
+                if (viewer) viewer.classList.add('is-panning');
+            }
+            photoZoomState = api.panPhoto(
+                photoZoomState,
+                dx,
+                dy,
+                photoBaseWidth,
+                photoBaseHeight,
+                frame.width,
+                frame.height
+            );
+            paintPhotoZoom();
+        }
+
+        function onPhotoPointerUp(event) {
+            const stage = document.getElementById('photo-viewer-stage');
+            const image = document.getElementById('photo-viewer-image');
+            const drag = photoDrag;
+            photoPointers.delete(event.pointerId);
+            if (photoPointers.size >= 2) beginPhotoPinch();
+            else photoPinch = null;
+            if (photoPointers.size === 1) {
+                const entry = photoPointers.entries().next().value;
+                photoDrag = {
+                    id: entry[0],
+                    lastX: entry[1].x,
+                    lastY: entry[1].y,
+                    startX: entry[1].x,
+                    startY: entry[1].y,
+                    moved: true,
+                };
+                return;
+            }
+            photoDrag = null;
+            const viewer = document.getElementById('photo-viewer');
+            if (viewer) viewer.classList.remove('is-panning');
+            if (!drag || drag.moved || drag.id !== event.pointerId) return;
+            const tappedImage = drag.target === image;
+            const now = Date.now();
+            if (tappedImage && now - photoLastTap < 300) {
+                photoLastTap = 0;
+                const frame = photoFrame();
+                if (!frame) return;
+                const pointerX = event.clientX - frame.centerX;
+                const pointerY = event.clientY - frame.centerY;
+                const next = photoZoomState.scale > 1.05 ? 1 : 2.5;
+                changePhotoZoom(next, pointerX, pointerY, pointerX, pointerY);
+                return;
+            }
+            photoLastTap = now;
+            if (!tappedImage && drag.target === stage) closePhotoViewer();
         }
 
         bindPhotoViewer();
