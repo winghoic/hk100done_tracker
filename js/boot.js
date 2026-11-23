@@ -1,6 +1,7 @@
 import { firebaseConfig } from "./firebase-config.js";
 import { createTrackerSync } from "./cloud-sync.js";
 import { createHikeId, hikePhotoAddBlock, hikePhotoList, MAX_HIKE_PHOTOS, visibleFingerprint } from "./sync-model.js";
+import * as photoZoom from "./photo-zoom.js";
 import { hikeFromGpx, prepareGpxDownload, trackAvailability } from "./gpx.js";
 import {
     ACTIVE_RECORDING_KEY,
@@ -45,6 +46,7 @@ window.createHikeId = () => createHikeId();
 window.MAX_HIKE_PHOTOS = MAX_HIKE_PHOTOS;
 window.hikePhotoList = hikePhotoList;
 window.hikePhotoAddBlock = hikePhotoAddBlock;
+window.photoZoom = photoZoom;
 window.trackerSync = sync;
 window.hikeTrackNote = (hike) => trackAvailability(hike).note;
 window.prepareHikeFromGpx = function prepareHikeFromGpx(text, filename) {
