@@ -2,6 +2,25 @@ export const GUEST_STORAGE_KEY = "hk100_guest_v1";
 export const USER_STORAGE_PREFIX = "hk100_user_v1_";
 export const LEGACY_APP_ID = "default-app-id";
 export const CLOUD_HIKE_CHAR_BUDGET = 800000;
+export const MAX_HIKE_PHOTOS = 3;
+
+export function hikePhotoList(hike) {
+    if (!hike || typeof hike !== "object") return [];
+    const extras = Array.isArray(hike.photos) ? hike.photos.filter(isStoredPhoto) : [];
+    if (isStoredPhoto(hike.photo)) return [hike.photo, ...extras];
+    return extras;
+}
+
+export function hikePhotoAddBlock(count) {
+    const total = Math.max(0, Math.floor(Number(count) || 0));
+    if (total > MAX_HIKE_PHOTOS) {
+        return `This hike has ${total} photos. You can still view them. Remove photos until ${MAX_HIKE_PHOTOS} or fewer are left before adding another.`;
+    }
+    if (total >= MAX_HIKE_PHOTOS) {
+        return `This hike already has ${MAX_HIKE_PHOTOS} photos. Remove one to add another.`;
+    }
+    return "";
+}
 
 const REQUIRED_CONFIG_KEYS = ["apiKey", "authDomain", "projectId", "appId"];
 
@@ -284,10 +303,14 @@ export function shrinkState(state) {
 export function shrinkHikeForCloud(hike, maxChars = CLOUD_HIKE_CHAR_BUDGET) {
     const next = { ...normalizeHike(hike) };
     if (!next) return hike;
-    if (serializedLength(next) > maxChars && next.photo) {
-        next.photo = null;
-        next.photoOmitted = true;
+    const originalCount = hikePhotoList(next).length;
+    let guard = originalCount;
+    while (serializedLength(next) > maxChars && guard > 0 && hikePhotoList(next).length) {
+        const remaining = hikePhotoList(next).slice(0, -1);
+        writeHikePhotoFields(next, remaining);
+        guard -= 1;
     }
+    if (hikePhotoList(next).length < originalCount) next.photoOmitted = true;
     if (serializedLength(next) > maxChars && next.points.length) {
         next.pointCount = next.points.length;
         next.points = [];
@@ -495,7 +518,7 @@ function normalizeHike(hike) {
         points,
         weather: hike.weather != null ? String(hike.weather) : "--",
         comment: hike.comment != null ? String(hike.comment) : "",
-        photo: typeof hike.photo === "string" && hike.photo ? hike.photo : null,
+        ...hikePhotoFields(hikePhotoList(hike)),
         weekId: Number.isFinite(weekRaw) ? weekRaw : null,
         createdAt: finiteNumber(hike.createdAt) || idTimestamp(id),
         updatedAt: finiteNumber(hike.updatedAt),
@@ -568,6 +591,7 @@ function compareHikesDesc(left, right) {
 }
 
 function visibleHike(hike) {
+    const photos = hikePhotoList(hike);
     return JSON.stringify({
         id: hike.id,
         name: hike.name,
@@ -577,7 +601,8 @@ function visibleHike(hike) {
         points: hike.points,
         weather: hike.weather,
         comment: hike.comment,
-        photo: hike.photo,
+        photo: photos[0] || null,
+        photos: photos.slice(1),
         weekId: hike.weekId,
     });
 }
@@ -591,7 +616,10 @@ function newerHike(base, incoming) {
 }
 
 function hydrateHike(primary, fallback) {
-    const photo = primary.photo || (primary.photoOmitted ? fallback.photo : primary.photo) || null;
+    const primaryPhotos = hikePhotoList(primary);
+    const fallbackPhotos = hikePhotoList(fallback);
+    const photos = primary.photoOmitted && fallbackPhotos.length ? fallbackPhotos : primaryPhotos;
+    const fields = hikePhotoFields(photos);
     const points = primary.points && primary.points.length
         ? primary.points
         : (primary.pointsOmitted && fallback.points && fallback.points.length ? fallback.points : primary.points || []);
@@ -599,9 +627,10 @@ function hydrateHike(primary, fallback) {
         ...fallback,
         ...primary,
         id: primary.id,
-        photo,
+        photo: fields.photo,
+        photos: fields.photos || [],
         points,
-        photoOmitted: primary.photoOmitted && !photo,
+        photoOmitted: primary.photoOmitted && photos.length === 0,
         pointsOmitted: primary.pointsOmitted && points.length === 0,
         pointCount: points.length || primary.pointCount || fallback.pointCount || 0,
     });
@@ -634,6 +663,24 @@ function stateFromParts(challengeMeta, hikes) {
 
 function hasTombstone(state) {
     return Object.values(state.challengeMeta || {}).some((entry) => entry && entry.done === false && entry.updatedAt);
+}
+
+function isStoredPhoto(value) {
+    return typeof value === "string" && value.length > 0;
+}
+
+function hikePhotoFields(list) {
+    const photos = (Array.isArray(list) ? list : []).filter(isStoredPhoto);
+    const fields = { photo: photos[0] || null };
+    if (photos.length > 1) fields.photos = photos.slice(1);
+    return fields;
+}
+
+function writeHikePhotoFields(target, list) {
+    const fields = hikePhotoFields(list);
+    target.photo = fields.photo;
+    if (fields.photos) target.photos = fields.photos;
+    else delete target.photos;
 }
 
 function serializedLength(value) {

@@ -15,6 +15,9 @@ import {
     normalizeState,
     planAccountLoad,
     readGuestState,
+    hikePhotoAddBlock,
+    hikePhotoList,
+    MAX_HIKE_PHOTOS,
     shrinkHikeForCloud,
     stampState,
     toFirebaseAppConfig,
@@ -129,8 +132,81 @@ test("oversized photos stay marked for local-only storage", () => {
         createdAt: 1,
     }, 1000);
     assert.equal(shrunk.photo, null);
+    assert.equal(shrunk.photos, undefined);
     assert.equal(shrunk.photoOmitted, true);
     assert.equal(shrunk.points.length, 1);
+});
+
+test("a hike keeps every saved photo, including more than three, and cloud shrink drops only the ones that do not fit", () => {
+    assert.equal(MAX_HIKE_PHOTOS, 3);
+    assert.equal(hikePhotoAddBlock(2), "");
+    assert.match(hikePhotoAddBlock(3), /already has 3 photos/);
+    assert.match(hikePhotoAddBlock(5), /still view them/);
+
+    const legacy = normalizeState({
+        hikes: [{ id: "hike_legacy", photo: "only", createdAt: 1 }],
+    });
+    assert.deepEqual(hikePhotoList(legacy.hikes[0]), ["only"]);
+    assert.equal(Object.hasOwn(legacy.hikes[0], "photos"), false);
+
+    const stored = normalizeState({
+        hikes: [{ id: "hike_photos", photo: "one", photos: ["two", "three", "four"], createdAt: 1 }],
+    });
+    assert.deepEqual(hikePhotoList(stored.hikes[0]), ["one", "two", "three", "four"]);
+    assert.equal(stored.hikes[0].photo, "one");
+    assert.deepEqual(stored.hikes[0].photos, ["two", "three", "four"]);
+    const encoded = encodeFirestoreValue(stored);
+    assert.deepEqual(encoded.hikes[0].photos, ["two", "three", "four"]);
+
+    const kept = shrinkHikeForCloud({
+        id: "hike_ok",
+        photo: "a".repeat(1000),
+        photos: ["b".repeat(1000), "c".repeat(1000)],
+        points: [[22, 114]],
+        createdAt: 1,
+    });
+    assert.equal(kept.photoOmitted, false);
+    assert.deepEqual(hikePhotoList(kept), ["a".repeat(1000), "b".repeat(1000), "c".repeat(1000)]);
+
+    const shrunk = shrinkHikeForCloud({
+        id: "hike_fit",
+        photo: "a".repeat(500),
+        photos: ["b".repeat(500), "c".repeat(500)],
+        points: [[22, 114]],
+        createdAt: 1,
+    }, 1200);
+    assert.equal(shrunk.photoOmitted, true);
+    assert.ok(hikePhotoList(shrunk).length < 3);
+    assert.ok(hikePhotoList(shrunk).length >= 1);
+    assert.equal(shrunk.photo.startsWith("a"), true);
+    assert.equal(JSON.stringify(shrunk).length <= 1200, true);
+    assert.equal(shrunk.points.length, 1);
+
+    const previous = stampState({}, {
+        hikes: [{ id: "hike_1", name: "Ridge", photo: "a", createdAt: 1 }],
+    }, 100);
+    const added = stampState(previous, {
+        hikes: [{ id: "hike_1", name: "Ridge", photo: "a", photos: ["b", "c"], createdAt: 1 }],
+    }, 200);
+    assert.equal(added.hikes[0].updatedAt, 200);
+    assert.deepEqual(hikePhotoList(added.hikes[0]), ["a", "b", "c"]);
+    const same = stampState(added, {
+        hikes: [{ id: "hike_1", name: "Ridge", photo: "a", photos: ["b", "c"], createdAt: 1 }],
+    }, 300);
+    assert.equal(same.hikes[0].updatedAt, 200);
+
+    const restored = mergeByRecency(
+        { hikes: [{ id: "p", name: "Cloud", updatedAt: 50, photo: null, photoOmitted: true, createdAt: 1 }] },
+        { hikes: [{ id: "p", name: "Cloud", updatedAt: 40, photo: "a", photos: ["b", "c"], createdAt: 1 }] }
+    );
+    assert.deepEqual(hikePhotoList(restored.hikes[0]), ["a", "b", "c"]);
+    assert.equal(restored.hikes[0].photoOmitted, false);
+
+    const deleted = mergeByRecency(
+        { hikes: [{ id: "p", name: "Cloud", updatedAt: 50, photo: null, createdAt: 1 }] },
+        { hikes: [{ id: "p", name: "Cloud", updatedAt: 40, photo: "a", photos: ["b"], createdAt: 1 }] }
+    );
+    assert.deepEqual(hikePhotoList(deleted.hikes[0]), []);
 });
 
 test("guest mode persists locally and explains that Google is not configured", async () => {
